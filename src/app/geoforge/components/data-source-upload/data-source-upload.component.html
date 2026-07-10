@@ -1,0 +1,431 @@
+<div class="card">
+  <div class="card-header">
+    <h5 class="card-title mb-0">Import a dataset</h5>
+    <small class="text-muted">
+      Upload a file or import directly from a service. Nothing is written until you confirm the preview.
+    </small>
+  </div>
+
+  <div class="card-body">
+    <!-- Stage indicator -->
+    <ol class="breadcrumb small mb-4">
+      <li class="breadcrumb-item" [class.fw-bold]="step() === 'source'">1. Source</li>
+      <li class="breadcrumb-item" [class.fw-bold]="step() === 'select' || step() === 'connect'">2. Connect</li>
+      <li class="breadcrumb-item"
+          [class.fw-bold]="step() === 'probe' || step() === 'configure' || step() === 'featureClass'">
+        3. Preview
+      </li>
+      <li class="breadcrumb-item" [class.fw-bold]="step() === 'import' || step() === 'done'">4. Import</li>
+    </ol>
+
+    <!-- ---------- 0. Choose source kind ---------- -->
+    <ng-container *ngIf="step() === 'source'">
+      <p class="text-muted">Where does this dataset come from?</p>
+      <div class="row g-3">
+        <div class="col-md-6" *ngFor="let opt of sourceOptions">
+          <button type="button" class="btn btn-outline-primary w-100 text-start p-3"
+                  (click)="chooseSource(opt)">
+            <div class="fw-bold">{{ opt.label }}</div>
+            <div class="small text-muted">{{ opt.hint }}</div>
+          </button>
+        </div>
+      </div>
+    </ng-container>
+
+    <!-- ---------- Connect: remote / Esri / URL ---------- -->
+    <ng-container *ngIf="step() === 'connect'">
+      <button class="btn btn-link px-0 mb-2" (click)="restart()">&larr; Back</button>
+
+      <h6>{{ sourceOption()?.label }}</h6>
+
+      <div class="mb-3">
+        <label class="form-label" for="gf-url">Service URL</label>
+        <input id="gf-url" class="form-control" [value]="remoteUrl()"
+               (input)="remoteUrl.set($any($event.target).value)"
+               placeholder="https://…/FeatureServer/0" />
+        <div class="form-text" *ngIf="isEsriSource()">
+          Paste a service root (<code>…/FeatureServer</code>) to pick a layer, or a specific
+          layer (<code>…/FeatureServer/3</code>).
+        </div>
+      </div>
+
+      <div class="mb-3" *ngIf="sourceOption()?.value === 'ogc-api-features'">
+        <label class="form-label" for="gf-collection">Collection id (optional)</label>
+        <input id="gf-collection" class="form-control" [value]="collectionId()"
+               (input)="collectionId.set($any($event.target).value)"
+               placeholder="e.g. parcels" />
+        <div class="form-text">Only needed when the URL is a landing page, not an items URL.</div>
+      </div>
+
+      <div class="mb-3">
+        <label class="form-label" for="gf-name">Name</label>
+        <input id="gf-name" class="form-control" [value]="remoteName()"
+               (input)="remoteName.set($any($event.target).value)"
+               placeholder="Defaults to the service name" />
+      </div>
+
+      <!-- Authentication -->
+      <div class="card bg-light mb-3" *ngIf="isEsriSource() || isUrlSource()">
+        <div class="card-body">
+          <label class="form-label" for="gf-auth">Authentication</label>
+          <select id="gf-auth" class="form-select mb-3"
+                  [value]="authType()"
+                  (change)="authType.set(+$any($event.target).value)">
+            <option [value]="AuthType.None">None (anonymous)</option>
+            <ng-container *ngIf="isEsriSource()">
+              <option [value]="AuthType.UsernamePassword">ArcGIS username &amp; password (generateToken)</option>
+              <option [value]="AuthType.Token">ArcGIS token</option>
+              <option [value]="AuthType.OAuth2ClientCredentials">OAuth 2.0 client credentials</option>
+            </ng-container>
+            <ng-container *ngIf="isUrlSource()">
+              <option [value]="AuthType.BearerToken">Bearer token</option>
+              <option [value]="AuthType.BasicAuth">HTTP Basic</option>
+            </ng-container>
+          </select>
+
+          <div class="row g-2" *ngIf="authType() === AuthType.UsernamePassword || authType() === AuthType.BasicAuth">
+            <div class="col-md-6">
+              <input class="form-control" placeholder="Username" [value]="username()"
+                     (input)="username.set($any($event.target).value)" />
+            </div>
+            <div class="col-md-6">
+              <input type="password" class="form-control" placeholder="Password" [value]="password()"
+                     (input)="password.set($any($event.target).value)" />
+            </div>
+            <div class="col-12" *ngIf="authType() === AuthType.UsernamePassword">
+              <input class="form-control" placeholder="generateToken endpoint (e.g. https://…/tokens/generateToken)"
+                     [value]="tokenEndpoint()" (input)="tokenEndpoint.set($any($event.target).value)" />
+            </div>
+          </div>
+
+          <div *ngIf="authType() === AuthType.Token || authType() === AuthType.BearerToken">
+            <input class="form-control" placeholder="Token" [value]="token()"
+                   (input)="token.set($any($event.target).value)" />
+          </div>
+
+          <div class="row g-2" *ngIf="authType() === AuthType.OAuth2ClientCredentials">
+            <div class="col-md-6">
+              <input class="form-control" placeholder="Client id" [value]="clientId()"
+                     (input)="clientId.set($any($event.target).value)" />
+            </div>
+            <div class="col-md-6">
+              <input type="password" class="form-control" placeholder="Client secret" [value]="clientSecret()"
+                     (input)="clientSecret.set($any($event.target).value)" />
+            </div>
+            <div class="col-12">
+              <input class="form-control" placeholder="Token endpoint (defaults to ArcGIS Online)"
+                     [value]="tokenEndpoint()" (input)="tokenEndpoint.set($any($event.target).value)" />
+            </div>
+          </div>
+
+          <div class="form-text mt-2">
+            Credentials are encrypted at rest and never returned by any API.
+          </div>
+        </div>
+      </div>
+
+      <button class="btn btn-primary" [disabled]="!remoteUrl() || busy()" (click)="connectRemote()">
+        <span *ngIf="busy()" class="spinner-border spinner-border-sm me-2"></span>
+        Validate &amp; preview
+      </button>
+
+      <!-- Layer picker (service root exposed several layers) -->
+      <div class="mt-4" *ngIf="needsLayerPick()">
+        <div class="alert alert-info">{{ metadata()?.message }}</div>
+        <div class="list-group">
+          <button type="button" class="list-group-item list-group-item-action d-flex justify-content-between"
+                  *ngFor="let l of metadata()?.layers" (click)="pickRemoteLayer(l.id)">
+            <span><strong>{{ l.name }}</strong> <span class="text-muted small">#{{ l.id }}</span></span>
+            <span class="text-muted small">{{ l.geometryType }}</span>
+          </button>
+        </div>
+      </div>
+    </ng-container>
+
+    <!-- ---------- 1. Select (file) ---------- -->
+    <ng-container *ngIf="step() === 'select'">
+      <button class="btn btn-link px-0 mb-2" (click)="restart()">&larr; Back</button>
+
+      <!-- The format is chosen, never sniffed: a zipped Shapefile and a zipped File
+           Geodatabase are both ".zip", so the extension cannot decide between them. -->
+      <p class="text-muted">Which format is this file?</p>
+      <div class="row g-3 mb-4">
+        <div class="col-md-6" *ngFor="let fmt of fileFormats">
+          <button type="button" class="btn w-100 text-start p-3"
+                  [class.btn-primary]="fileFormat()?.value === fmt.value"
+                  [class.btn-outline-primary]="fileFormat()?.value !== fmt.value"
+                  (click)="chooseFileFormat(fmt)">
+            <div class="fw-bold">{{ fmt.label }}</div>
+            <div class="small" [class.text-muted]="fileFormat()?.value !== fmt.value">{{ fmt.hint }}</div>
+          </button>
+        </div>
+      </div>
+
+      <ng-container *ngIf="fileFormat() as fmt">
+        <div class="mb-3">
+          <label class="form-label" for="gf-file">{{ fmt.label }} file</label>
+          <input id="gf-file" type="file" class="form-control"
+                 [accept]="fmt.accept"
+                 (change)="onFileSelected($event)" />
+          <div class="form-text" *ngIf="fmt.value === 'shapefile'">
+            A Shapefile must be zipped with its <code>.dbf</code>, <code>.shx</code> and
+            (strongly recommended) <code>.prj</code> sidecars.
+          </div>
+          <div class="form-text" *ngIf="fmt.value === 'gdb'">
+            Zip the <code>.gdb</code> folder itself. You will pick a feature class after upload.
+          </div>
+        </div>
+
+        <div class="mb-3" *ngIf="file()">
+          <label class="form-label" for="gf-display">Display name</label>
+          <input id="gf-display" type="text" class="form-control"
+                 [value]="displayName()" (input)="displayName.set($any($event.target).value)" />
+        </div>
+
+        <button class="btn btn-primary" [disabled]="!file() || busy()" (click)="uploadFile()">
+          <span *ngIf="busy()" class="spinner-border spinner-border-sm me-2"></span>
+          Upload
+        </button>
+      </ng-container>
+    </ng-container>
+
+    <!-- ---------- 1b. Pick a feature class (File Geodatabase) ---------- -->
+    <ng-container *ngIf="step() === 'featureClass'">
+      <button class="btn btn-link px-0 mb-2" (click)="restart()">&larr; Start over</button>
+
+      <div *ngIf="busy() && !metadata()" class="text-center py-4">
+        <div class="spinner-border"></div>
+        <p class="mt-2 mb-0 text-muted">Reading the geodatabase…</p>
+      </div>
+
+      <ng-container *ngIf="metadata() as meta">
+        <div class="alert alert-info" *ngIf="meta.message">{{ meta.message }}</div>
+
+        <div class="list-group" *ngIf="meta.layers.length">
+          <button type="button" class="list-group-item list-group-item-action d-flex justify-content-between"
+                  *ngFor="let fc of meta.layers"
+                  [class.active]="selectedFeatureClass() === fc.name"
+                  [disabled]="busy()"
+                  (click)="pickFeatureClass(fc.name)">
+            <span><strong>{{ fc.name }}</strong></span>
+            <span class="small">{{ fc.geometryType }}</span>
+          </button>
+        </div>
+      </ng-container>
+    </ng-container>
+
+    <!-- ---------- 2. Configure (CSV only) ---------- -->
+    <ng-container *ngIf="step() === 'configure'">
+      <div class="alert alert-info">
+        A CSV carries no coordinate reference system and no geometry column. Bind them here —
+        guessing would silently place the layer in the wrong part of the world.
+      </div>
+
+      <div class="row g-3">
+        <div class="col-md-4">
+          <label class="form-label" for="gf-x">X / longitude column</label>
+          <input id="gf-x" class="form-control" [value]="csvXColumn()"
+                 (input)="csvXColumn.set($any($event.target).value)" />
+        </div>
+        <div class="col-md-4">
+          <label class="form-label" for="gf-y">Y / latitude column</label>
+          <input id="gf-y" class="form-control" [value]="csvYColumn()"
+                 (input)="csvYColumn.set($any($event.target).value)" />
+        </div>
+        <div class="col-md-4">
+          <label class="form-label" for="gf-srid">Source SRID</label>
+          <input id="gf-srid" type="number" class="form-control" [value]="csvSrid()"
+                 (input)="csvSrid.set(+$any($event.target).value)" />
+        </div>
+        <div class="col-md-6">
+          <label class="form-label" for="gf-wkt">…or a WKT geometry column</label>
+          <input id="gf-wkt" class="form-control" [value]="csvWktColumn()"
+                 (input)="csvWktColumn.set($any($event.target).value)" />
+          <div class="form-text">Takes precedence over the X/Y binding.</div>
+        </div>
+      </div>
+
+      <button class="btn btn-primary mt-3" [disabled]="busy()" (click)="saveCsvConfiguration()">
+        <span *ngIf="busy()" class="spinner-border spinner-border-sm me-2"></span>
+        Continue
+      </button>
+    </ng-container>
+
+    <!-- ---------- 3. Probe preview ---------- -->
+    <ng-container *ngIf="step() === 'probe'">
+      <div *ngIf="busy()" class="text-center py-4">
+        <div class="spinner-border"></div>
+        <p class="mt-2 mb-0 text-muted">Probing the source…</p>
+      </div>
+
+      <ng-container *ngIf="probe() as p">
+        <!-- Blocking issues: the import cannot proceed. -->
+        <div class="alert alert-danger" *ngIf="p.blockingIssues.length">
+          <strong>This dataset cannot be imported.</strong>
+          <ul class="mb-0 mt-2">
+            <li *ngFor="let issue of p.blockingIssues">{{ issue.message }}</li>
+          </ul>
+        </div>
+
+        <div class="alert alert-warning" *ngIf="p.warnings.length">
+          <strong>Warnings</strong>
+          <ul class="mb-0 mt-2">
+            <li *ngFor="let w of p.warnings">{{ w.message }}</li>
+          </ul>
+        </div>
+
+        <div class="row mb-3">
+          <div class="col-md-3">
+            <div class="text-muted small">Geometry</div>
+            <div>
+              {{ geometryLabels[p.geometryType] }}
+              <span class="text-muted" *ngIf="p.promotedGeometryType !== p.geometryType">
+                → stored as {{ geometryLabels[p.promotedGeometryType] }}
+              </span>
+            </div>
+          </div>
+          <div class="col-md-3">
+            <div class="text-muted small">Detected SRID</div>
+            <div>
+              {{ p.detectedSrid ?? '—' }}
+              <span class="badge bg-warning text-dark ms-1" *ngIf="sridIsGuessed()">guessed</span>
+              <span class="badge bg-success ms-1" *ngIf="p.sridIsConfident">declared</span>
+            </div>
+          </div>
+          <div class="col-md-3">
+            <div class="text-muted small">Features (estimate)</div>
+            <div>{{ p.estimatedFeatureCount ?? 'unknown' }}</div>
+          </div>
+          <div class="col-md-3">
+            <div class="text-muted small">Attribute columns</div>
+            <div>{{ p.fields.length }}</div>
+          </div>
+        </div>
+
+        <div class="alert alert-warning" *ngIf="sridIsGuessed()">
+          The coordinate reference system was not declared by the file. Confirm the SRID below
+          before importing — an import at the wrong SRID is worse than a failed import.
+        </div>
+
+        <h6>Schema</h6>
+        <div class="table-responsive mb-4" style="max-height: 260px; overflow-y: auto">
+          <table class="table table-sm table-striped">
+            <thead>
+              <tr>
+                <th>Source column</th>
+                <th>Stored as</th>
+                <th>Type</th>
+                <th>Sample</th>
+                <th class="text-center">Index</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr *ngFor="let f of p.fields">
+                <td>{{ f.originalName }}</td>
+                <td><code>{{ f.normalizedName }}</code></td>
+                <td class="text-muted">{{ f.dataType }}</td>
+                <td class="text-muted small text-truncate" style="max-width: 220px">
+                  {{ f.sampleValues.join(', ') }}
+                </td>
+                <td class="text-center">
+                  <input type="checkbox"
+                         [checked]="indexedFields().includes(f.normalizedName)"
+                         (change)="toggleIndexedField(f.normalizedName)" />
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <h6>Layer</h6>
+        <div class="row g-3 mb-3">
+          <div class="col-md-4">
+            <label class="form-label" for="gf-name">Layer name (slug)</label>
+            <input id="gf-name" class="form-control" [value]="layerName()"
+                   (input)="layerName.set($any($event.target).value)" />
+            <div class="form-text">Appears in every endpoint URL.</div>
+          </div>
+          <div class="col-md-4">
+            <label class="form-label" for="gf-title">Display name</label>
+            <input id="gf-title" class="form-control" [value]="displayName()"
+                   (input)="displayName.set($any($event.target).value)" />
+          </div>
+          <div class="col-md-2">
+            <label class="form-label" for="gf-override">SRID</label>
+            <input id="gf-override" type="number" class="form-control" [value]="sridOverride()"
+                   (input)="sridOverride.set(+$any($event.target).value)" />
+          </div>
+          <div class="col-md-2">
+            <label class="form-label" for="gf-reject">Reject threshold %</label>
+            <input id="gf-reject" type="number" class="form-control" [value]="rejectThreshold()"
+                   (input)="rejectThreshold.set(+$any($event.target).value)" />
+          </div>
+          <div class="col-12">
+            <label class="form-label" for="gf-desc">Description</label>
+            <textarea id="gf-desc" class="form-control" rows="2" [value]="description()"
+                      (input)="description.set($any($event.target).value)"></textarea>
+          </div>
+          <div class="col-12">
+            <div class="form-check">
+              <input class="form-check-input" type="checkbox" id="gf-autopublish"
+                     [checked]="autoPublish()" (change)="autoPublish.set($any($event.target).checked)" />
+              <label class="form-check-label" for="gf-autopublish">
+                Publish immediately, skipping operator review
+              </label>
+            </div>
+          </div>
+        </div>
+
+        <button class="btn btn-primary" [disabled]="!canImport() || busy()" (click)="startImport()">
+          Import
+        </button>
+        <button class="btn btn-link" (click)="restart()">Start over</button>
+      </ng-container>
+    </ng-container>
+
+    <!-- ---------- 4. Import progress ---------- -->
+    <ng-container *ngIf="step() === 'import' || step() === 'done'">
+      <ng-container *ngIf="job() as j">
+        <h6>{{ importStatusLabels[j.status] }}</h6>
+
+        <div class="progress mb-3" style="height: 22px">
+          <div class="progress-bar"
+               [class.bg-danger]="j.status === 8"
+               [class.bg-success]="j.status === 7"
+               [class.progress-bar-animated]="step() === 'import'"
+               [class.progress-bar-striped]="step() === 'import'"
+               [style.width.%]="j.progressPercent">
+            {{ j.progressPercent }}%
+          </div>
+        </div>
+
+        <div class="row text-center mb-3">
+          <div class="col"><div class="fs-5">{{ j.featuresRead }}</div><div class="text-muted small">read</div></div>
+          <div class="col"><div class="fs-5">{{ j.featuresWritten }}</div><div class="text-muted small">written</div></div>
+          <div class="col"><div class="fs-5">{{ j.featuresRejected }}</div><div class="text-muted small">rejected</div></div>
+        </div>
+
+        <div class="alert alert-danger" *ngIf="j.errorMessage">
+          <strong>{{ j.errorCode }}</strong>
+          <div>{{ j.errorMessage }}</div>
+        </div>
+
+        <div class="d-flex gap-2">
+          <button class="btn btn-outline-danger" *ngIf="step() === 'import'" (click)="cancelImport()">
+            Cancel import
+          </button>
+          <button class="btn btn-primary" *ngIf="j.gisLayerId && j.status === 7" (click)="viewLayer()">
+            View layer
+          </button>
+          <a class="btn btn-outline-secondary" *ngIf="j.featuresRejected > 0"
+             [href]="rejectedRowsUrl()" target="_blank" rel="noopener">
+            Download rejected rows
+          </a>
+          <button class="btn btn-link" *ngIf="step() === 'done'" (click)="restart()">
+            Import another
+          </button>
+        </div>
+      </ng-container>
+    </ng-container>
+  </div>
+</div>

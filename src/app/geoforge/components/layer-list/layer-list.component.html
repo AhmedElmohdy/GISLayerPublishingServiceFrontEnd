@@ -1,0 +1,82 @@
+<div class="card">
+  <div class="card-header d-flex justify-content-between align-items-center">
+    <h5 class="card-title mb-0">Layers</h5>
+    <a class="btn btn-primary btn-sm" routerLink="/geoforge/import">Import a dataset</a>
+  </div>
+
+  <div class="card-body">
+    <div class="row mb-3">
+      <div class="col-md-4">
+        <input class="form-control" placeholder="Search layers…"
+               (keyup.enter)="search($any($event.target).value)" />
+      </div>
+    </div>
+
+    <div *ngIf="loading()" class="text-center py-4">
+      <div class="spinner-border"></div>
+    </div>
+
+    <div *ngIf="!loading() && layers().length === 0" class="text-center text-muted py-5">
+      <p class="mb-1">No layers yet.</p>
+      <p class="small">Import a Shapefile, GeoJSON or CSV to create one.</p>
+    </div>
+
+    <div class="table-responsive" *ngIf="!loading() && layers().length > 0">
+      <table class="table table-hover align-middle">
+        <thead>
+          <tr>
+            <th>Name</th>
+            <th>Geometry</th>
+            <th class="text-end">Features</th>
+            <th class="text-center">Version</th>
+            <th>Status</th>
+            <th class="text-center">Public</th>
+            <th class="text-end">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr *ngFor="let layer of layers()">
+            <td>
+              <a [routerLink]="['/geoforge/layers', layer.id]">{{ layer.displayName }}</a>
+              <div class="text-muted small"><code>{{ layer.name }}</code></div>
+            </td>
+            <td>
+              {{ geometryLabels[layer.geometryType] }}
+              <div class="text-muted small">EPSG:{{ layer.srid }}</div>
+            </td>
+            <td class="text-end">{{ layer.featureCount | number }}</td>
+            <td class="text-center">v{{ layer.version }}</td>
+            <td>
+              <span class="badge" [ngClass]="statusClass(layer.publishStatus)">
+                {{ statusLabels[layer.publishStatus] }}
+              </span>
+            </td>
+            <td class="text-center">
+              <span *ngIf="layer.isPublic" class="badge bg-info text-dark">public</span>
+              <span *ngIf="!layer.isPublic" class="text-muted small">—</span>
+            </td>
+            <td class="text-end">
+              <button class="btn btn-sm btn-outline-success me-1"
+                      *ngIf="layer.publishStatus !== PublishStatus.Published"
+                      (click)="publish(layer)">Publish</button>
+              <button class="btn btn-sm btn-outline-secondary me-1"
+                      *ngIf="layer.publishStatus === PublishStatus.Published"
+                      (click)="unpublish(layer)">Unpublish</button>
+              <button class="btn btn-sm btn-outline-danger" (click)="delete(layer)">Delete</button>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="d-flex justify-content-between align-items-center" *ngIf="totalCount() > pageSize">
+      <span class="text-muted small">{{ totalCount() }} layers</span>
+      <div>
+        <button class="btn btn-sm btn-outline-secondary me-1"
+                [disabled]="page() === 0" (click)="previousPage()">Previous</button>
+        <button class="btn btn-sm btn-outline-secondary"
+                [disabled]="(page() + 1) * pageSize >= totalCount()" (click)="nextPage()">Next</button>
+      </div>
+    </div>
+  </div>
+</div>

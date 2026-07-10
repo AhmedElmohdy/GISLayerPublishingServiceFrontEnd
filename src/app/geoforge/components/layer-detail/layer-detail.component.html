@@ -1,0 +1,194 @@
+<div *ngIf="loading()" class="text-center py-5">
+  <div class="spinner-border"></div>
+</div>
+
+<ng-container *ngIf="!loading() && layer() as l">
+  <div class="card mb-3">
+    <div class="card-header d-flex justify-content-between align-items-start">
+      <div>
+        <h5 class="card-title mb-1">
+          {{ l.displayName }}
+          <span class="badge ms-2"
+                [class.bg-success]="l.publishStatus === PublishStatus.Published"
+                [class.bg-secondary]="l.publishStatus === PublishStatus.Draft"
+                [class.bg-warning]="l.publishStatus === PublishStatus.Deprecated"
+                [class.text-dark]="l.publishStatus === PublishStatus.Deprecated">
+            {{ statusLabels[l.publishStatus] }}
+          </span>
+          <span class="badge bg-info text-dark ms-1" *ngIf="l.isPublic">public</span>
+        </h5>
+        <div class="text-muted small"><code>{{ l.name }}</code> · v{{ l.version }}</div>
+      </div>
+
+      <div class="d-flex gap-2">
+        <button class="btn btn-sm btn-outline-primary"
+                *ngIf="l.publishStatus !== PublishStatus.Published"
+                [disabled]="l.publishBlockers.length > 0"
+                (click)="publish()">Publish</button>
+        <button class="btn btn-sm btn-outline-secondary"
+                *ngIf="l.publishStatus === PublishStatus.Published"
+                (click)="unpublish()">Unpublish</button>
+        <button class="btn btn-sm btn-outline-info" (click)="toggleVisibility()">
+          {{ l.isPublic ? 'Make private' : 'Make public' }}
+        </button>
+      </div>
+    </div>
+
+    <div class="card-body">
+      <p class="text-muted" *ngIf="l.description">{{ l.description }}</p>
+
+      <!-- Publish preconditions, stated in operator-readable form. -->
+      <div class="alert alert-warning" *ngIf="l.publishBlockers.length">
+        <strong>This layer cannot be published yet:</strong>
+        <ul class="mb-0 mt-2">
+          <li *ngFor="let blocker of l.publishBlockers">{{ blocker }}</li>
+        </ul>
+      </div>
+
+      <div class="alert alert-warning" *ngIf="l.sridIsInferred">
+        The source coordinate system was <strong>inferred</strong>, not declared. Verify the layer
+        renders where it should before relying on it.
+      </div>
+
+      <!-- ---- Tabs ---- -->
+      <ul class="nav nav-tabs mb-3">
+        <li class="nav-item">
+          <button type="button" class="nav-link" [class.active]="activeTab() === 'overview'"
+                  (click)="selectTab('overview')">Overview</button>
+        </li>
+        <li class="nav-item">
+          <button type="button" class="nav-link" [class.active]="activeTab() === 'fields'"
+                  (click)="selectTab('fields')">Fields</button>
+        </li>
+        <li class="nav-item">
+          <button type="button" class="nav-link" [class.active]="activeTab() === 'endpoints'"
+                  (click)="selectTab('endpoints')">Endpoints</button>
+        </li>
+        <li class="nav-item">
+          <button type="button" class="nav-link" [class.active]="activeTab() === 'map'"
+                  [disabled]="!canPreview()"
+                  [title]="canPreview() ? '' : 'Publish the layer to preview it'"
+                  (click)="selectTab('map')">Map</button>
+        </li>
+      </ul>
+
+      <div class="row" [class.d-none]="activeTab() !== 'overview'">
+        <div class="col-md-3">
+          <div class="text-muted small">Geometry</div>
+          <div>{{ geometryLabels[l.geometryType] }}</div>
+        </div>
+        <div class="col-md-2">
+          <div class="text-muted small">Features</div>
+          <div>{{ l.featureCount | number }}</div>
+        </div>
+        <div class="col-md-2">
+          <div class="text-muted small">Storage CRS</div>
+          <div>EPSG:{{ l.srid }}</div>
+        </div>
+        <div class="col-md-2">
+          <div class="text-muted small">Native CRS</div>
+          <div>EPSG:{{ l.nativeSrid }}</div>
+        </div>
+        <div class="col-md-3">
+          <div class="text-muted small">Max record count</div>
+          <div>{{ l.maxRecordCount | number }}</div>
+        </div>
+      </div>
+
+      <div class="row mt-3" [class.d-none]="activeTab() !== 'overview'">
+        <div class="col-md-8">
+          <div class="text-muted small">Extent (WGS 84)</div>
+          <div><code>{{ extentText() }}</code></div>
+        </div>
+        <div class="col-md-4">
+          <div class="text-muted small">Object ID field</div>
+          <div><code>{{ l.objectIdField }}</code></div>
+        </div>
+      </div>
+
+      <!-- ---- Map tab ----
+           Created on the first visit and kept alive afterwards: rebuilding the MapView would
+           re-download the basemap and re-query the FeatureServer on every tab switch. -->
+      <div [class.d-none]="activeTab() !== 'map'">
+        <app-layer-map *ngIf="mapEverOpened() && canPreview()" [layer]="l"></app-layer-map>
+      </div>
+    </div>
+  </div>
+
+  <!-- ---- Consuming applications ---- -->
+  <div class="card mb-3" *ngIf="l.endpoints && activeTab() === 'endpoints'">
+    <div class="card-header">
+      <h6 class="card-title mb-0">Consume this layer</h6>
+      <small class="text-muted">Each client gets the protocol it speaks natively.</small>
+    </div>
+    <div class="card-body p-0">
+      <table class="table table-sm mb-0 align-middle">
+        <thead>
+          <tr>
+            <th>Client</th>
+            <th>Protocol</th>
+            <th>URL</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr *ngFor="let e of endpoints()">
+            <td class="text-nowrap">{{ e.client }}</td>
+            <td class="text-nowrap text-muted small">{{ e.protocol }}</td>
+            <td>
+              <code class="small d-block text-truncate" style="max-width: 520px">{{ e.url }}</code>
+              <div class="text-muted small">{{ e.note }}</div>
+            </td>
+            <td class="text-end">
+              <button class="btn btn-sm btn-outline-secondary" (click)="copy(e.url)">Copy</button>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="alert alert-secondary" *ngIf="!l.endpoints && activeTab() === 'endpoints'">
+    Endpoint URLs appear once the layer is published.
+  </div>
+
+  <!-- ---- Schema ---- -->
+  <div class="card" *ngIf="activeTab() === 'fields'">
+    <div class="card-header">
+      <h6 class="card-title mb-0">Fields</h6>
+      <small class="text-muted">
+        These names are the only identifiers accepted by <code>where</code> and <code>outFields</code>.
+      </small>
+    </div>
+    <div class="card-body p-0">
+      <table class="table table-sm mb-0">
+        <thead>
+          <tr>
+            <th>Column</th>
+            <th>Alias</th>
+            <th>Type</th>
+            <th>Esri type</th>
+            <th class="text-center">Indexed</th>
+            <th class="text-center">Visible</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr *ngFor="let f of l.fields">
+            <td><code>{{ f.name }}</code></td>
+            <td>{{ f.alias }}</td>
+            <td class="text-muted">{{ fieldTypeLabels[f.dataType] }}</td>
+            <td class="text-muted small">{{ f.esriType }}</td>
+            <td class="text-center">
+              <span *ngIf="f.isIndexed">✓</span>
+              <span *ngIf="!f.isIndexed" class="text-muted">—</span>
+            </td>
+            <td class="text-center">
+              <span *ngIf="f.isVisible">✓</span>
+              <span *ngIf="!f.isVisible" class="text-muted">—</span>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</ng-container>

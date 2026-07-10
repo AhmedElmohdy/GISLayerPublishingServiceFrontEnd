@@ -1,0 +1,40 @@
+<div class="d-flex flex-wrap align-items-center gap-2 mb-3">
+  <button type="button" class="btn btn-outline-primary btn-sm"
+          [disabled]="!isRenderable || loading()" (click)="zoomToLayer()">
+    Zoom to layer
+  </button>
+
+  <button type="button" class="btn btn-outline-secondary btn-sm"
+          [disabled]="!featureServerUrl" (click)="copyFeatureServiceUrl()">
+    Copy Feature Service URL
+  </button>
+
+  <button type="button" class="btn btn-outline-secondary btn-sm"
+          [disabled]="!featureServerUrl" (click)="openInNewTab()">
+    Open in new tab
+  </button>
+
+  <div class="btn-group btn-group-sm ms-auto" role="group" aria-label="Basemap">
+    <button type="button" class="btn"
+            *ngFor="let bm of basemaps"
+            [class.btn-primary]="activeBasemap() === bm.id"
+            [class.btn-outline-primary]="activeBasemap() !== bm.id"
+            [disabled]="loading() || !!error()"
+            (click)="setBasemap(bm.id)">
+      {{ bm.label }}
+    </button>
+  </div>
+</div>
+
+<div class="alert alert-warning" *ngIf="error()">{{ error() }}</div>
+
+<div class="position-relative">
+  <!-- The container must exist before ngAfterViewInit, so it is never *ngIf'd away. -->
+  <div #mapContainer class="gf-map-view border rounded" [class.d-none]="!!error()"></div>
+
+  <div *ngIf="loading() && !error()"
+       class="position-absolute top-50 start-50 translate-middle text-center">
+    <div class="spinner-border"></div>
+    <p class="mt-2 mb-0 text-muted">Loading the map…</p>
+  </div>
+</div>

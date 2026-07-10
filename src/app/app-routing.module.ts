@@ -56,6 +56,10 @@ const routes: Routes = [
     ),
   },
   {
+    path: 'geoforge',
+    loadChildren: () => import('./geoforge/geoforge.module').then(m => m.GeoForgeModule),
+  },
+  {
     path: 'setting-management',
     loadChildren: () =>
       import('@abp/ng.setting-management').then(m => m.SettingManagementModule.forLazy()),
