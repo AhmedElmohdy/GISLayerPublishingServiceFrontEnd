@@ -1,0 +1,288 @@
+<div class="d-flex flex-wrap justify-content-between align-items-start gap-3 mb-3">
+  <div>
+    <nav class="small mb-1">
+      <a routerLink="/geoforge/dashboard">{{ '::GeoForge:Dashboard:Title' | abpLocalization }}</a>
+      <span class="text-muted mx-1">/</span>
+      <a [routerLink]="['/geoforge/layers', layerId()]" *ngIf="data()">{{ data()!.displayName }}</a>
+    </nav>
+    <h4 class="mb-0">{{ data()?.displayName || ('::GeoForge:LayerUsage:Title' | abpLocalization) }}</h4>
+    <div class="text-muted gf-mono" *ngIf="data()">{{ data()!.name }}</div>
+  </div>
+
+  <div class="d-flex flex-wrap align-items-center gap-2">
+    <gf-date-range (periodChange)="onPeriodChange($event)"></gf-date-range>
+    <button type="button" class="btn btn-sm btn-outline-secondary" (click)="load()">
+      <i class="fas fa-rotate-right me-1" aria-hidden="true"></i>
+      {{ '::GeoForge:Dashboard:Refresh' | abpLocalization }}
+    </button>
+  </div>
+</div>
+
+<!-- Summary ---------------------------------------------------------------- -->
+<div class="row g-2 mb-3">
+  <div class="col-6 col-md-4 col-xl-2">
+    <gf-kpi-card
+      [label]="'::GeoForge:Kpi:TotalRequests' | abpLocalization"
+      [kpi]="kpi(data()?.totalRequests)"
+      [loading]="loading()"
+      [error]="error()"
+      icon="fa-arrow-right-arrow-left"
+    ></gf-kpi-card>
+  </div>
+  <div class="col-6 col-md-4 col-xl-2">
+    <gf-kpi-card
+      [label]="'::GeoForge:Kpi:SuccessfulRequests' | abpLocalization"
+      [kpi]="kpi(data()?.successfulRequests)"
+      [loading]="loading()"
+      [error]="error()"
+      icon="fa-check"
+    ></gf-kpi-card>
+  </div>
+  <div class="col-6 col-md-4 col-xl-2">
+    <gf-kpi-card
+      [label]="'::GeoForge:Kpi:FailedRequests' | abpLocalization"
+      [kpi]="kpi(data()?.failedRequests)"
+      [loading]="loading()"
+      [error]="error()"
+      icon="fa-xmark"
+    ></gf-kpi-card>
+  </div>
+  <div class="col-6 col-md-4 col-xl-2">
+    <gf-kpi-card
+      [label]="'::GeoForge:LayerUsage:UniqueClients' | abpLocalization"
+      [kpi]="kpi(data()?.uniqueClientCount)"
+      [loading]="loading()"
+      [error]="error()"
+      icon="fa-id-badge"
+    ></gf-kpi-card>
+  </div>
+  <div class="col-6 col-md-4 col-xl-2">
+    <gf-kpi-card
+      [label]="'::GeoForge:Kpi:AverageResponseTime' | abpLocalization"
+      [kpi]="kpi(data()?.averageResponseTimeMs)"
+      [loading]="loading()"
+      [error]="error()"
+      format="ms"
+      icon="fa-gauge-high"
+    ></gf-kpi-card>
+  </div>
+  <div class="col-6 col-md-4 col-xl-2">
+    <gf-kpi-card
+      [label]="'::GeoForge:Kpi:ErrorRate' | abpLocalization"
+      [kpi]="kpi(data()?.errorRatePercent)"
+      [loading]="loading()"
+      [error]="error()"
+      format="percent"
+      icon="fa-triangle-exclamation"
+    ></gf-kpi-card>
+  </div>
+</div>
+
+<div class="row g-2 mb-3" *ngIf="data() as layer">
+  <div class="col-12">
+    <div class="card">
+      <div class="card-body py-2 d-flex flex-wrap gap-4 small">
+        <span>
+          <span class="text-muted">min</span>
+          <strong class="ms-1 gf-num">{{ layer.minResponseTimeMs | number }} ms</strong>
+        </span>
+        <span>
+          <span class="text-muted">max</span>
+          <strong class="ms-1 gf-num">{{ layer.maxResponseTimeMs | number }} ms</strong>
+        </span>
+        <span *ngIf="layer.lastSuccessfulRequest">
+          <span class="text-muted">{{ '::GeoForge:Audit:Success' | abpLocalization }}</span>
+          <strong class="ms-1">{{ layer.lastSuccessfulRequest.creationTime | date: 'short' }}</strong>
+        </span>
+        <span *ngIf="layer.lastFailedRequest">
+          <span class="text-muted">{{ '::GeoForge:Audit:Failure' | abpLocalization }}</span>
+          <strong class="ms-1">{{ layer.lastFailedRequest.creationTime | date: 'short' }}</strong>
+        </span>
+        <span *ngIf="layer.health">
+          <span class="text-muted me-1">{{ '::GeoForge:Health:Title' | abpLocalization }}</span>
+          <gf-status-badge
+            [status]="layerHealthStatus(layer.health.status)"
+            [label]="healthLabel(layer.health.status)"
+          ></gf-status-badge>
+        </span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Charts ----------------------------------------------------------------- -->
+<div class="row g-3 mb-3">
+  <div class="col-12 col-xl-8">
+    <gf-panel
+      [title]="'::GeoForge:Chart:RequestsOverTime' | abpLocalization"
+      [loading]="loading()"
+      [error]="error()"
+      (retry)="load()"
+    >
+      <gf-line-chart
+        [labels]="dayLabels()"
+        [series]="daySeries()"
+        [emptyMessage]="'::GeoForge:Dashboard:NoData' | abpLocalization"
+        [tableLabel]="'::GeoForge:Dashboard:ViewTable' | abpLocalization"
+      ></gf-line-chart>
+    </gf-panel>
+  </div>
+
+  <div class="col-12 col-xl-4">
+    <gf-panel
+      [title]="'::GeoForge:Chart:SuccessVsFailure' | abpLocalization"
+      [loading]="loading()"
+      [error]="error()"
+      (retry)="load()"
+    >
+      <gf-donut-chart
+        [slices]="successSlices()"
+        [centerLabel]="'::GeoForge:Kpi:TotalRequests' | abpLocalization"
+        [emptyMessage]="'::GeoForge:Dashboard:NoData' | abpLocalization"
+      ></gf-donut-chart>
+    </gf-panel>
+  </div>
+
+  <div class="col-12 col-xl-6">
+    <gf-panel
+      [title]="'::GeoForge:Chart:ResponseTimeTrend' | abpLocalization"
+      [loading]="loading()"
+      [error]="error()"
+      (retry)="load()"
+    >
+      <gf-line-chart
+        [labels]="dayLabels()"
+        [series]="responseSeries()"
+        valueFormat="ms"
+        [emptyMessage]="'::GeoForge:Dashboard:NoData' | abpLocalization"
+        [tableLabel]="'::GeoForge:Dashboard:ViewTable' | abpLocalization"
+      ></gf-line-chart>
+    </gf-panel>
+  </div>
+
+  <div class="col-12 col-xl-6">
+    <gf-panel
+      [title]="'::GeoForge:Chart:RequestsByHour' | abpLocalization"
+      [loading]="loading()"
+      [error]="error()"
+      (retry)="load()"
+    >
+      <gf-line-chart
+        [labels]="hourLabels()"
+        [series]="hourSeries()"
+        [emptyMessage]="'::GeoForge:Dashboard:NoData' | abpLocalization"
+        [tableLabel]="'::GeoForge:Dashboard:ViewTable' | abpLocalization"
+      ></gf-line-chart>
+    </gf-panel>
+  </div>
+
+  <div class="col-12 col-lg-4">
+    <gf-panel
+      [title]="'::GeoForge:Chart:RequestsByEndpoint' | abpLocalization"
+      [loading]="loading()"
+      [error]="error()"
+      (retry)="load()"
+    >
+      <gf-bar-chart [slices]="operationSlices()" [emptyMessage]="'::GeoForge:Dashboard:NoData' | abpLocalization"></gf-bar-chart>
+    </gf-panel>
+  </div>
+
+  <div class="col-12 col-lg-4">
+    <gf-panel
+      [title]="'::GeoForge:Chart:RequestsByStatusCode' | abpLocalization"
+      [loading]="loading()"
+      [error]="error()"
+      (retry)="load()"
+    >
+      <gf-bar-chart [slices]="statusSlices()" [emptyMessage]="'::GeoForge:Dashboard:NoData' | abpLocalization"></gf-bar-chart>
+    </gf-panel>
+  </div>
+
+  <div class="col-12 col-lg-4">
+    <gf-panel
+      [title]="'::GeoForge:Chart:RequestsByClient' | abpLocalization"
+      [loading]="loading()"
+      [error]="error()"
+      (retry)="load()"
+    >
+      <gf-bar-chart [slices]="clientSlices()" [emptyMessage]="'::GeoForge:Dashboard:NoData' | abpLocalization"></gf-bar-chart>
+    </gf-panel>
+  </div>
+</div>
+
+<!-- Top clients ------------------------------------------------------------ -->
+<div class="card mb-3" *ngIf="data() && data()!.topClients.length > 0">
+  <div class="card-header">
+    <h6 class="card-title mb-0">{{ '::GeoForge:Chart:RequestsByClient' | abpLocalization }}</h6>
+  </div>
+  <div class="card-body table-responsive">
+    <table class="table table-sm table-hover align-middle gf-table">
+      <thead>
+        <tr>
+          <th scope="col">{{ '::GeoForge:Clients:ClientId' | abpLocalization }}</th>
+          <th scope="col">{{ '::GeoForge:Clients:Name' | abpLocalization }}</th>
+          <th scope="col" class="text-end">{{ '::GeoForge:LayerUsage:TotalRequests' | abpLocalization }}</th>
+          <th scope="col" class="text-end">{{ '::GeoForge:LayerUsage:Failed' | abpLocalization }}</th>
+          <th scope="col" class="text-end">{{ '::GeoForge:LayerUsage:AvgResponse' | abpLocalization }}</th>
+          <th scope="col">{{ '::GeoForge:LayerUsage:LastAccessed' | abpLocalization }}</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr *ngFor="let client of data()!.topClients">
+          <td class="gf-mono small">
+            <a *ngIf="client.apiClientId" [routerLink]="['/geoforge/clients', client.apiClientId, 'analytics']">
+              {{ client.clientId }}
+            </a>
+            <span *ngIf="!client.apiClientId" class="text-muted">
+              {{ '::GeoForge:AuthType:Anonymous' | abpLocalization }}
+            </span>
+          </td>
+          <td>{{ client.clientName || '—' }}</td>
+          <td class="text-end gf-num">{{ client.totalRequests | number }}</td>
+          <td class="text-end gf-num">{{ client.failedRequests | number }}</td>
+          <td class="text-end gf-num">{{ client.averageResponseTimeMs | number: '1.0-0' }} ms</td>
+          <td class="small text-muted">{{ client.lastAccessedAt ? (client.lastAccessedAt | date: 'short') : '—' }}</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- Recent errors ---------------------------------------------------------- -->
+<div class="card">
+  <div class="card-header">
+    <h6 class="card-title mb-0">{{ '::GeoForge:Incidents:Title' | abpLocalization }}</h6>
+  </div>
+  <div class="card-body">
+    <div *ngIf="!loading() && data() && data()!.recentErrors.length === 0" class="text-muted small text-center py-3">
+      {{ '::GeoForge:Incidents:None' | abpLocalization }}
+    </div>
+
+    <div class="table-responsive" *ngIf="data() && data()!.recentErrors.length > 0">
+      <table class="table table-sm table-hover align-middle gf-table">
+        <thead>
+          <tr>
+            <th scope="col">{{ '::GeoForge:Audit:Timestamp' | abpLocalization }}</th>
+            <th scope="col">{{ '::GeoForge:Audit:Operation' | abpLocalization }}</th>
+            <th scope="col" class="text-end">{{ '::GeoForge:Audit:StatusCode' | abpLocalization }}</th>
+            <th scope="col">{{ '::GeoForge:Audit:ErrorCode' | abpLocalization }}</th>
+            <th scope="col">{{ '::GeoForge:Audit:ErrorMessage' | abpLocalization }}</th>
+            <th scope="col">{{ '::GeoForge:Audit:CorrelationId' | abpLocalization }}</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr *ngFor="let error of data()!.recentErrors">
+            <td class="small">{{ error.creationTime | date: 'short' }}</td>
+            <td class="small">{{ operationKeys[error.operation] | abpLocalization }}</td>
+            <td class="text-end">
+              <gf-status-badge [status]="statusCodeStatus(error.statusCode)" [label]="'' + error.statusCode"></gf-status-badge>
+            </td>
+            <td class="gf-mono small">{{ error.errorCode || '—' }}</td>
+            <td class="small text-muted">{{ error.errorMessage || '—' }}</td>
+            <td class="gf-mono small">{{ error.correlationId || '—' }}</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>

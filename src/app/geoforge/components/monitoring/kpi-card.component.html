@@ -1,0 +1,45 @@
+<div class="card gf-kpi h-100">
+  <div class="card-body">
+    <div class="gf-kpi__head">
+      <span class="gf-kpi__label">{{ label }}</span>
+      <i class="fas gf-kpi__icon" *ngIf="icon" [ngClass]="icon" aria-hidden="true"></i>
+    </div>
+
+    <!-- Loading. A skeleton the same height as the value it replaces, so the grid does not
+         reflow when the data lands. -->
+    <ng-container *ngIf="loading; else loaded">
+      <div class="gf-kpi__skeleton gf-kpi__skeleton--value"></div>
+      <div class="gf-kpi__skeleton gf-kpi__skeleton--delta"></div>
+    </ng-container>
+
+    <ng-template #loaded>
+      <ng-container *ngIf="error; else ok">
+        <div class="gf-kpi__value gf-kpi__value--muted">—</div>
+        <div class="gf-kpi__delta gf-kpi__delta--bad">
+          <i class="fas fa-triangle-exclamation" aria-hidden="true"></i>
+          {{ '::GeoForge:Dashboard:LoadFailed' | abpLocalization }}
+        </div>
+      </ng-container>
+
+      <ng-template #ok>
+        <div class="gf-kpi__value" [class.gf-kpi__value--muted]="isEmpty">{{ value }}</div>
+
+        <div class="gf-kpi__delta" [ngClass]="changeClass" *ngIf="hasChange; else noChange">
+          <i class="fas" *ngIf="arrow" [ngClass]="arrow" aria-hidden="true"></i>
+          <span>{{ changeLabel }}</span>
+          <small class="gf-kpi__delta-caption">
+            {{ '::GeoForge:Dashboard:VsPrevious' | abpLocalization }}
+          </small>
+        </div>
+
+        <ng-template #noChange>
+          <div class="gf-kpi__delta gf-kpi__delta--neutral">
+            <small class="gf-kpi__delta-caption" *ngIf="isEmpty">
+              {{ '::GeoForge:Dashboard:NoData' | abpLocalization }}
+            </small>
+          </div>
+        </ng-template>
+      </ng-template>
+    </ng-template>
+  </div>
+</div>

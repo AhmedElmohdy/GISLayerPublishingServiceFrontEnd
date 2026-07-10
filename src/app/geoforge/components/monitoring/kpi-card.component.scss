@@ -1,0 +1,109 @@
+@use './chart-palette' as palette;
+
+@include palette.chart-palette;
+
+.gf-kpi .card-body {
+  padding: 0.875rem 1rem;
+}
+
+.gf-kpi__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.gf-kpi__label {
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--gf-ink-secondary);
+  line-height: 1.2;
+}
+
+.gf-kpi__icon {
+  color: var(--gf-ink-muted);
+  font-size: 0.8rem;
+  flex: none;
+}
+
+.gf-kpi__value {
+  margin-top: 0.375rem;
+  font-size: 1.6rem;
+  font-weight: 600;
+  line-height: 1.15;
+  color: var(--gf-ink);
+  // Proportional figures for a standalone hero number; tabular-nums is for aligned columns.
+  white-space: nowrap;
+}
+
+.gf-kpi__value--muted {
+  color: var(--gf-ink-muted);
+  font-weight: 500;
+}
+
+.gf-kpi__delta {
+  display: flex;
+  align-items: baseline;
+  gap: 0.3rem;
+  margin-top: 0.25rem;
+  font-size: 0.75rem;
+  font-variant-numeric: tabular-nums;
+  min-height: 1.1rem;
+}
+
+.gf-kpi__delta--good {
+  color: var(--gf-good);
+}
+
+.gf-kpi__delta--bad {
+  color: var(--gf-critical);
+}
+
+.gf-kpi__delta--neutral {
+  color: var(--gf-ink-muted);
+}
+
+.gf-kpi__delta-caption {
+  color: var(--gf-ink-muted);
+  font-size: 0.68rem;
+}
+
+.gf-kpi__skeleton {
+  margin-top: 0.5rem;
+  border-radius: 0.25rem;
+  background: linear-gradient(
+    90deg,
+    rgba(128, 128, 128, 0.12) 25%,
+    rgba(128, 128, 128, 0.2) 37%,
+    rgba(128, 128, 128, 0.12) 63%
+  );
+  background-size: 400% 100%;
+  animation: gf-kpi-shimmer 1.3s ease-in-out infinite;
+}
+
+.gf-kpi__skeleton--value {
+  height: 1.6rem;
+  width: 60%;
+}
+
+.gf-kpi__skeleton--delta {
+  height: 0.7rem;
+  width: 40%;
+  margin-top: 0.4rem;
+}
+
+@keyframes gf-kpi-shimmer {
+  0% {
+    background-position: 100% 50%;
+  }
+  100% {
+    background-position: 0 50%;
+  }
+}
+
+// Respect the reader who has asked the operating system to stop moving things.
+@media (prefers-reduced-motion: reduce) {
+  .gf-kpi__skeleton {
+    animation: none;
+  }
+}

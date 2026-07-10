@@ -1,0 +1,21 @@
+<div class="gf-bars" *ngIf="!empty; else emptyState">
+  <div
+    class="gf-bars__row"
+    *ngFor="let slice of rows; index as i"
+    (mouseenter)="hoverIndex.set(i)"
+    (mouseleave)="hoverIndex.set(null)"
+    [class.gf-bars__row--hover]="hoverIndex() === i"
+  >
+    <span class="gf-bars__label" [title]="slice.label">{{ slice.label }}</span>
+
+    <span class="gf-bars__track">
+      <span class="gf-bars__fill" [style.width]="widthOf(slice)" [style.background]="colorOf(slice)"></span>
+    </span>
+
+    <span class="gf-bars__value">{{ format(slice.value) }}</span>
+  </div>
+</div>
+
+<ng-template #emptyState>
+  <div class="gf-chart__empty">{{ emptyMessage }}</div>
+</ng-template>

@@ -1,0 +1,35 @@
+// Table conventions shared by every monitoring page.
+//
+// `tabular-nums` on numeric columns only. Proportional figures are right for a standalone hero
+// number; a column of them fails to align, and an operator scanning for an outlier is reading the
+// column, not the number.
+//
+// Component styles are encapsulated, so this is a mixin rather than a global rule: each page
+// opts in, and nothing here leaks into the rest of the application's tables.
+
+@mixin monitoring-tables {
+  .gf-table {
+    font-size: 0.82rem;
+
+    th {
+      font-weight: 600;
+      white-space: nowrap;
+    }
+  }
+
+  .gf-num {
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+  }
+
+  .gf-mono {
+    font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, monospace;
+    font-size: 0.72rem;
+    word-break: break-all;
+  }
+
+  // Wide content scrolls inside its own container; the page body never scrolls sideways.
+  .table-responsive {
+    overflow-x: auto;
+  }
+}

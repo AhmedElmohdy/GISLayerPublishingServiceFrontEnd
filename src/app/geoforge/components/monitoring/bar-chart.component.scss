@@ -1,0 +1,56 @@
+@use './chart-palette' as palette;
+
+@include palette.chart-palette;
+@include palette.chart-chrome;
+
+.gf-bars {
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+}
+
+.gf-bars__row {
+  display: grid;
+  // Logical columns: the grid mirrors itself under RTL without any direction-specific rule.
+  grid-template-columns: minmax(6rem, 11rem) 1fr minmax(3.5rem, auto);
+  align-items: center;
+  gap: 0.625rem;
+  padding: 0.125rem 0.25rem;
+  border-radius: 0.25rem;
+}
+
+.gf-bars__row--hover {
+  background: rgba(128, 128, 128, 0.09);
+}
+
+.gf-bars__label {
+  font-size: 0.78rem;
+  color: var(--gf-ink-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.gf-bars__track {
+  position: relative;
+  height: 0.625rem;
+  border-radius: 0.3125rem;
+  background: var(--gf-grid);
+  overflow: hidden;
+}
+
+.gf-bars__fill {
+  display: block;
+  height: 100%;
+  // 4px rounded data-end, anchored to the baseline. The zero end stays square against the axis.
+  border-start-end-radius: 4px;
+  border-end-end-radius: 4px;
+  transition: width 0.2s ease-out;
+}
+
+.gf-bars__value {
+  font-size: 0.78rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--gf-ink);
+  text-align: end;
+}

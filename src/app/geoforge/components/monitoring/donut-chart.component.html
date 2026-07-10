@@ -1,0 +1,52 @@
+<div class="gf-donut" *ngIf="!empty; else emptyState">
+  <svg
+    class="gf-donut__svg"
+    [attr.viewBox]="'0 0 ' + size + ' ' + size"
+    role="img"
+    [attr.aria-label]="centerLabel"
+  >
+    <path
+      *ngFor="let arc of arcs; index as i"
+      [attr.d]="arc.path"
+      [attr.fill]="arc.color"
+      class="gf-donut__arc"
+      [class.gf-donut__arc--dim]="hoverIndex() !== null && hoverIndex() !== i"
+      (mouseenter)="hoverIndex.set(i)"
+      (mouseleave)="hoverIndex.set(null)"
+    />
+
+    <text class="gf-donut__total" [attr.x]="size / 2" [attr.y]="size / 2 - 2" text-anchor="middle">
+      {{ centerValue }}
+    </text>
+    <text
+      class="gf-donut__caption"
+      [attr.x]="size / 2"
+      [attr.y]="size / 2 + 16"
+      text-anchor="middle"
+    >
+      {{ centerLabel }}
+    </text>
+  </svg>
+
+  <!-- Every slice is direct-labelled with its value and share, so the colours never carry the
+       meaning alone. This is the relief the palette's sub-3:1 slots require. -->
+  <div class="gf-donut__legend">
+    <div
+      class="gf-donut__legend-item"
+      *ngFor="let arc of arcs; index as i"
+      [class.gf-donut__legend-item--hover]="hoverIndex() === i"
+      (mouseenter)="hoverIndex.set(i)"
+      (mouseleave)="hoverIndex.set(null)"
+    >
+      <span class="gf-chart__swatch" [style.background]="arc.color"></span>
+      <span class="gf-donut__legend-label">{{ arc.slice.label }}</span>
+      <span class="gf-donut__legend-value">
+        {{ arc.slice.value | number }} <small>({{ percentOf(arc.slice) }})</small>
+      </span>
+    </div>
+  </div>
+</div>
+
+<ng-template #emptyState>
+  <div class="gf-chart__empty">{{ emptyMessage }}</div>
+</ng-template>

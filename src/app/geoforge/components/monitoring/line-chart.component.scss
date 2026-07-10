@@ -1,0 +1,4 @@
+@use './chart-palette' as palette;
+
+@include palette.chart-palette;
+@include palette.chart-chrome;

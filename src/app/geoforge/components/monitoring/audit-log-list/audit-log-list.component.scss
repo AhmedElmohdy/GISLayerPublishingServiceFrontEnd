@@ -1,0 +1,25 @@
+@use '../monitoring-tables' as tables;
+
+@include tables.monitoring-tables;
+
+.gf-detail {
+  background: rgba(128, 128, 128, 0.06);
+}
+
+.gf-detail dl {
+  display: grid;
+  grid-template-columns: minmax(8rem, auto) 1fr;
+  gap: 0.2rem 1rem;
+  margin: 0;
+  font-size: 0.76rem;
+}
+
+.gf-detail dt {
+  color: var(--lpx-text-color-secondary, #6c757d);
+  font-weight: 500;
+}
+
+.gf-detail dd {
+  margin: 0;
+  word-break: break-word;
+}

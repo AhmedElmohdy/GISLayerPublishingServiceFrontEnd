@@ -1,0 +1,286 @@
+<div class="d-flex flex-wrap justify-content-between align-items-start gap-3 mb-3">
+  <div>
+    <h4 class="mb-0">{{ '::GeoForge:Audit:Title' | abpLocalization }}</h4>
+  </div>
+
+  <div class="d-flex flex-wrap align-items-center gap-2">
+    <gf-date-range preset="last7" (periodChange)="onPeriodChange($event)"></gf-date-range>
+
+    <button type="button" class="btn btn-sm btn-outline-secondary" (click)="load()">
+      <i class="fas fa-rotate-right me-1" aria-hidden="true"></i>
+      {{ '::GeoForge:Dashboard:Refresh' | abpLocalization }}
+    </button>
+
+    <!-- Exporting leaves the building with IP addresses and user agents in it, which is why it
+         is its own permission and not simply part of reading the log. -->
+    <div class="btn-group btn-group-sm" *abpPermission="'GeoForge.Export'">
+      <button
+        type="button"
+        class="btn btn-outline-primary"
+        [disabled]="exporting()"
+        (click)="export(ExportFormat.Csv)"
+      >
+        <i class="fas fa-file-csv me-1" aria-hidden="true"></i>
+        {{ '::GeoForge:Dashboard:ExportCsv' | abpLocalization }}
+      </button>
+      <button
+        type="button"
+        class="btn btn-outline-primary"
+        [disabled]="exporting()"
+        (click)="export(ExportFormat.Excel)"
+      >
+        <i class="fas fa-file-excel me-1" aria-hidden="true"></i>
+        {{ '::GeoForge:Dashboard:ExportExcel' | abpLocalization }}
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- Filters ---------------------------------------------------------------- -->
+<div class="card mb-3">
+  <div class="card-body py-2">
+    <div class="row g-2 align-items-end">
+      <div class="col-6 col-md-3 col-xl-2">
+        <label class="form-label small text-muted mb-1" for="gf-f-endpoint">
+          {{ '::GeoForge:Audit:Endpoint' | abpLocalization }}
+        </label>
+        <input
+          id="gf-f-endpoint"
+          class="form-control form-control-sm"
+          [value]="filters().filter || ''"
+          (keyup.enter)="setFilter('filter', $any($event.target).value)"
+        />
+      </div>
+
+      <div class="col-6 col-md-3 col-xl-2">
+        <label class="form-label small text-muted mb-1" for="gf-f-result">
+          {{ '::GeoForge:Audit:Result' | abpLocalization }}
+        </label>
+        <select
+          id="gf-f-result"
+          class="form-select form-select-sm"
+          (change)="setFilter('isSuccessful', $any($event.target).value === '' ? '' : $any($event.target).value === 'true')"
+        >
+          <option value="">{{ '::GeoForge:Audit:All' | abpLocalization }}</option>
+          <option value="true">{{ '::GeoForge:Audit:Success' | abpLocalization }}</option>
+          <option value="false">{{ '::GeoForge:Audit:Failure' | abpLocalization }}</option>
+        </select>
+      </div>
+
+      <div class="col-6 col-md-3 col-xl-2">
+        <label class="form-label small text-muted mb-1" for="gf-f-method">
+          {{ '::GeoForge:Audit:Method' | abpLocalization }}
+        </label>
+        <select id="gf-f-method" class="form-select form-select-sm" (change)="setFilter('httpMethod', $any($event.target).value)">
+          <option value="">{{ '::GeoForge:Audit:All' | abpLocalization }}</option>
+          <option *ngFor="let method of httpMethods" [value]="method">{{ method }}</option>
+        </select>
+      </div>
+
+      <div class="col-6 col-md-3 col-xl-2">
+        <label class="form-label small text-muted mb-1" for="gf-f-status">
+          {{ '::GeoForge:Audit:StatusCode' | abpLocalization }}
+        </label>
+        <input
+          id="gf-f-status"
+          type="number"
+          class="form-control form-control-sm"
+          (keyup.enter)="setFilter('statusCode', $any($event.target).value)"
+        />
+      </div>
+
+      <div class="col-6 col-md-3 col-xl-2">
+        <label class="form-label small text-muted mb-1" for="gf-f-operation">
+          {{ '::GeoForge:Audit:Operation' | abpLocalization }}
+        </label>
+        <select id="gf-f-operation" class="form-select form-select-sm" (change)="setFilter('operation', $any($event.target).value)">
+          <option value="">{{ '::GeoForge:Audit:All' | abpLocalization }}</option>
+          <option *ngFor="let operation of operations" [value]="operation">
+            {{ operationKeys[operation] | abpLocalization }}
+          </option>
+        </select>
+      </div>
+
+      <div class="col-6 col-md-3 col-xl-2">
+        <label class="form-label small text-muted mb-1" for="gf-f-auth">
+          {{ '::GeoForge:Audit:AuthType' | abpLocalization }}
+        </label>
+        <select id="gf-f-auth" class="form-select form-select-sm" (change)="setFilter('authenticationType', $any($event.target).value)">
+          <option value="">{{ '::GeoForge:Audit:All' | abpLocalization }}</option>
+          <option *ngFor="let auth of authTypes" [value]="auth">{{ authTypeKeys[auth] | abpLocalization }}</option>
+        </select>
+      </div>
+
+      <div class="col-6 col-md-3 col-xl-2">
+        <label class="form-label small text-muted mb-1" for="gf-f-errorcode">
+          {{ '::GeoForge:Audit:ErrorCode' | abpLocalization }}
+        </label>
+        <input
+          id="gf-f-errorcode"
+          class="form-control form-control-sm"
+          (keyup.enter)="setFilter('errorCode', $any($event.target).value)"
+        />
+      </div>
+
+      <div class="col-6 col-md-3 col-xl-2">
+        <label class="form-label small text-muted mb-1" for="gf-f-ip">
+          {{ '::GeoForge:Audit:IpAddress' | abpLocalization }}
+        </label>
+        <input
+          id="gf-f-ip"
+          class="form-control form-control-sm"
+          (keyup.enter)="setFilter('ipAddress', $any($event.target).value)"
+        />
+      </div>
+
+      <div class="col-6 col-md-3 col-xl-2">
+        <label class="form-label small text-muted mb-1" for="gf-f-correlation">
+          {{ '::GeoForge:Audit:CorrelationId' | abpLocalization }}
+        </label>
+        <input
+          id="gf-f-correlation"
+          class="form-control form-control-sm"
+          (keyup.enter)="setFilter('correlationId', $any($event.target).value)"
+        />
+      </div>
+
+      <div class="col-auto">
+        <button type="button" class="btn btn-sm btn-outline-secondary" (click)="clearFilters()">
+          <i class="fas fa-filter-circle-xmark" aria-hidden="true"></i>
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Table ------------------------------------------------------------------ -->
+<div class="card">
+  <div class="card-body">
+    <div *ngIf="loading()" class="text-center py-4"><div class="spinner-border spinner-border-sm"></div></div>
+
+    <div *ngIf="!loading() && error()" class="text-center text-danger py-4 small">
+      {{ '::GeoForge:Dashboard:LoadFailed' | abpLocalization }}
+      <button class="btn btn-sm btn-outline-secondary ms-2" (click)="load()">
+        {{ '::GeoForge:Dashboard:Retry' | abpLocalization }}
+      </button>
+    </div>
+
+    <div *ngIf="!loading() && !error() && logs().length === 0" class="text-center text-muted py-4 small">
+      {{ '::GeoForge:Dashboard:NoData' | abpLocalization }}
+    </div>
+
+    <div class="table-responsive" *ngIf="!loading() && !error() && logs().length > 0">
+      <table class="table table-sm table-hover align-middle gf-table">
+        <thead>
+          <tr>
+            <th scope="col">{{ '::GeoForge:Audit:Timestamp' | abpLocalization }}</th>
+            <th scope="col">{{ '::GeoForge:Audit:Method' | abpLocalization }}</th>
+            <th scope="col">{{ '::GeoForge:Audit:Endpoint' | abpLocalization }}</th>
+            <th scope="col">{{ '::GeoForge:Audit:Operation' | abpLocalization }}</th>
+            <th scope="col">{{ '::GeoForge:Audit:Layer' | abpLocalization }}</th>
+            <th scope="col">{{ '::GeoForge:Audit:Client' | abpLocalization }}</th>
+            <th scope="col" class="text-end">{{ '::GeoForge:Audit:StatusCode' | abpLocalization }}</th>
+            <th scope="col" class="text-end">{{ '::GeoForge:Audit:ResponseTime' | abpLocalization }}</th>
+            <th scope="col">{{ '::GeoForge:Audit:IpAddress' | abpLocalization }}</th>
+            <th scope="col" class="text-end"></th>
+          </tr>
+        </thead>
+        <tbody>
+          <ng-container *ngFor="let log of logs()">
+            <tr>
+              <td class="small text-nowrap">{{ log.creationTime | date: 'short' }}</td>
+              <td class="gf-mono">{{ log.httpMethod }}</td>
+              <td class="gf-mono">{{ log.endpoint }}</td>
+              <td class="small">{{ operationKeys[log.operation] | abpLocalization }}</td>
+              <td class="small">
+                <a *ngIf="log.layerId" [routerLink]="['/geoforge/layers', log.layerId, 'analytics']">
+                  {{ log.layerName || log.layerId }}
+                </a>
+                <span *ngIf="!log.layerId" class="text-muted">—</span>
+              </td>
+              <td class="small">
+                <a *ngIf="log.apiClientId" [routerLink]="['/geoforge/clients', log.apiClientId, 'analytics']">
+                  {{ log.clientId }}
+                </a>
+                <span *ngIf="!log.apiClientId" class="text-muted">
+                  {{ authTypeKeys[log.authenticationType] | abpLocalization }}
+                </span>
+              </td>
+              <td class="text-end">
+                <gf-status-badge [status]="statusCodeStatus(log.statusCode)" [label]="'' + log.statusCode"></gf-status-badge>
+              </td>
+              <td class="text-end gf-num">{{ log.responseTimeMs | number }} ms</td>
+              <td class="gf-mono">{{ log.ipAddress || '—' }}</td>
+              <td class="text-end">
+                <button
+                  type="button"
+                  class="btn btn-sm btn-link p-0"
+                  (click)="toggleDetails(log.id)"
+                  [attr.aria-expanded]="expandedId() === log.id"
+                  [title]="'::GeoForge:Audit:Details' | abpLocalization"
+                >
+                  <i class="fas" [ngClass]="expandedId() === log.id ? 'fa-chevron-up' : 'fa-chevron-down'"></i>
+                </button>
+              </td>
+            </tr>
+
+            <tr *ngIf="expandedId() === log.id" class="gf-detail">
+              <td colspan="10">
+                <dl>
+                  <dt>{{ '::GeoForge:Audit:QueryString' | abpLocalization }}</dt>
+                  <dd class="gf-mono">{{ log.queryString || '—' }}</dd>
+
+                  <dt>{{ '::GeoForge:Audit:UserAgent' | abpLocalization }}</dt>
+                  <dd>{{ log.userAgent || '—' }}</dd>
+
+                  <dt>{{ '::GeoForge:Audit:CorrelationId' | abpLocalization }}</dt>
+                  <dd class="gf-mono">{{ log.correlationId || '—' }}</dd>
+
+                  <dt>{{ '::GeoForge:Audit:TraceId' | abpLocalization }}</dt>
+                  <dd class="gf-mono">{{ log.traceId || '—' }}</dd>
+
+                  <!-- A fingerprint, not a token. The token itself is never stored. -->
+                  <dt>{{ '::GeoForge:Audit:TokenFingerprint' | abpLocalization }}</dt>
+                  <dd class="gf-mono">{{ log.tokenFingerprint || '—' }}</dd>
+
+                  <dt>{{ '::GeoForge:Audit:AuthType' | abpLocalization }}</dt>
+                  <dd>{{ authTypeKeys[log.authenticationType] | abpLocalization }}</dd>
+
+                  <dt>{{ '::GeoForge:Audit:Environment' | abpLocalization }}</dt>
+                  <dd>{{ log.environment || '—' }}</dd>
+
+                  <ng-container *ngIf="log.errorCode || log.errorMessage">
+                    <dt>{{ '::GeoForge:Audit:ErrorCode' | abpLocalization }}</dt>
+                    <dd class="gf-mono">{{ log.errorCode || '—' }}</dd>
+
+                    <dt>{{ '::GeoForge:Audit:ErrorMessage' | abpLocalization }}</dt>
+                    <dd>{{ log.errorMessage || '—' }}</dd>
+
+                    <dt>{{ '::GeoForge:Audit:ExceptionType' | abpLocalization }}</dt>
+                    <dd class="gf-mono">{{ log.exceptionType || '—' }}</dd>
+                  </ng-container>
+                </dl>
+              </td>
+            </tr>
+          </ng-container>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="d-flex justify-content-between align-items-center" *ngIf="totalCount() > pageSize">
+      <span class="text-muted small gf-num">{{ totalCount() | number }}</span>
+      <div>
+        <button class="btn btn-sm btn-outline-secondary me-1" [disabled]="page() === 0" (click)="previousPage()">
+          &lsaquo;
+        </button>
+        <button
+          class="btn btn-sm btn-outline-secondary"
+          [disabled]="(page() + 1) * pageSize >= totalCount()"
+          (click)="nextPage()"
+        >
+          &rsaquo;
+        </button>
+      </div>
+    </div>
+  </div>
+</div>

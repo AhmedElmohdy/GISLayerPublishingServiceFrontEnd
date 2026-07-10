@@ -1,0 +1,7 @@
+@use '../monitoring-tables' as tables;
+
+@include tables.monitoring-tables;
+
+.gf-detail {
+  background: rgba(128, 128, 128, 0.06);
+}

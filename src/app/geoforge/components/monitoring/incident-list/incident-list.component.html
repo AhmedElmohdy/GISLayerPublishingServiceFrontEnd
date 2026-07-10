@@ -1,0 +1,203 @@
+<div class="d-flex flex-wrap justify-content-between align-items-start gap-3 mb-3">
+  <h4 class="mb-0">{{ '::GeoForge:Incidents:Title' | abpLocalization }}</h4>
+
+  <div class="d-flex flex-wrap align-items-center gap-2">
+    <gf-date-range (periodChange)="onPeriodChange($event)"></gf-date-range>
+    <button type="button" class="btn btn-sm btn-outline-secondary" (click)="load()">
+      <i class="fas fa-rotate-right me-1" aria-hidden="true"></i>
+      {{ '::GeoForge:Dashboard:Refresh' | abpLocalization }}
+    </button>
+  </div>
+</div>
+
+<div class="card mb-3">
+  <div class="card-body py-2">
+    <div class="row g-2 align-items-end">
+      <div class="col-6 col-md-3">
+        <label class="form-label small text-muted mb-1" for="gf-i-severity">
+          {{ '::GeoForge:Incidents:Severity' | abpLocalization }}
+        </label>
+        <select id="gf-i-severity" class="form-select form-select-sm" (change)="setFilter('severity', $any($event.target).value)">
+          <option value="">{{ '::GeoForge:Audit:All' | abpLocalization }}</option>
+          <option *ngFor="let severity of severities" [value]="severity">
+            {{ severityKeys[severity] | abpLocalization }}
+          </option>
+        </select>
+      </div>
+
+      <div class="col-6 col-md-3">
+        <label class="form-label small text-muted mb-1" for="gf-i-status">
+          {{ '::GeoForge:Incidents:Status' | abpLocalization }}
+        </label>
+        <select id="gf-i-status" class="form-select form-select-sm" (change)="setFilter('status', $any($event.target).value)">
+          <option value="">{{ '::GeoForge:Audit:All' | abpLocalization }}</option>
+          <option *ngFor="let status of statuses" [value]="status">{{ statusKeys[status] | abpLocalization }}</option>
+        </select>
+      </div>
+
+      <div class="col-6 col-md-3">
+        <label class="form-label small text-muted mb-1" for="gf-i-error">
+          {{ '::GeoForge:Audit:ErrorCode' | abpLocalization }}
+        </label>
+        <input id="gf-i-error" class="form-control form-control-sm" (keyup.enter)="setFilter('errorCode', $any($event.target).value)" />
+      </div>
+
+      <div class="col-6 col-md-3">
+        <label class="form-label small text-muted mb-1" for="gf-i-filter">
+          {{ '::GeoForge:Incidents:IncidentTitle' | abpLocalization }}
+        </label>
+        <input id="gf-i-filter" class="form-control form-control-sm" (keyup.enter)="setFilter('filter', $any($event.target).value)" />
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-body">
+    <div *ngIf="loading()" class="text-center py-4"><div class="spinner-border spinner-border-sm"></div></div>
+
+    <div *ngIf="!loading() && error()" class="text-center text-danger py-4 small">
+      {{ '::GeoForge:Dashboard:LoadFailed' | abpLocalization }}
+      <button class="btn btn-sm btn-outline-secondary ms-2" (click)="load()">
+        {{ '::GeoForge:Dashboard:Retry' | abpLocalization }}
+      </button>
+    </div>
+
+    <div *ngIf="!loading() && !error() && incidents().length === 0" class="text-center text-muted py-5">
+      <i class="fas fa-circle-check fa-2x mb-2 d-block text-success" aria-hidden="true"></i>
+      {{ '::GeoForge:Incidents:None' | abpLocalization }}
+    </div>
+
+    <div class="table-responsive" *ngIf="!loading() && !error() && incidents().length > 0">
+      <table class="table table-sm table-hover align-middle gf-table">
+        <thead>
+          <tr>
+            <th scope="col">{{ '::GeoForge:Incidents:Severity' | abpLocalization }}</th>
+            <th scope="col">{{ '::GeoForge:Incidents:Status' | abpLocalization }}</th>
+            <th scope="col">{{ '::GeoForge:Incidents:IncidentTitle' | abpLocalization }}</th>
+            <th scope="col">{{ '::GeoForge:Audit:Layer' | abpLocalization }}</th>
+            <th scope="col">{{ '::GeoForge:Audit:ErrorCode' | abpLocalization }}</th>
+            <th scope="col" class="text-end">{{ '::GeoForge:Incidents:Occurrences' | abpLocalization }}</th>
+            <th scope="col">{{ '::GeoForge:Incidents:FirstOccurred' | abpLocalization }}</th>
+            <th scope="col">{{ '::GeoForge:Incidents:LastOccurred' | abpLocalization }}</th>
+            <th scope="col" class="text-end"></th>
+          </tr>
+        </thead>
+        <tbody>
+          <ng-container *ngFor="let incident of incidents()">
+            <tr>
+              <td>
+                <gf-status-badge
+                  [status]="severityStatus(incident.severity)"
+                  [label]="severityKeys[incident.severity] | abpLocalization"
+                ></gf-status-badge>
+              </td>
+              <td>
+                <gf-status-badge
+                  [status]="incidentStatusStatus(incident.status)"
+                  [label]="statusKeys[incident.status] | abpLocalization"
+                ></gf-status-badge>
+              </td>
+              <td>{{ incident.title }}</td>
+              <td class="small">
+                <a *ngIf="incident.layerId" [routerLink]="['/geoforge/layers', incident.layerId, 'analytics']">
+                  {{ incident.layerName || incident.layerId }}
+                </a>
+                <span *ngIf="!incident.layerId" class="text-muted">—</span>
+              </td>
+              <td class="gf-mono small">{{ incident.errorCode || '—' }}</td>
+              <td class="text-end gf-num">{{ incident.occurrenceCount | number }}</td>
+              <td class="small text-muted text-nowrap">{{ incident.firstOccurredAt | date: 'short' }}</td>
+              <td class="small text-muted text-nowrap">{{ incident.lastOccurredAt | date: 'short' }}</td>
+              <td class="text-end">
+                <button type="button" class="btn btn-sm btn-link p-0" (click)="toggleDetails(incident.id)">
+                  <i class="fas" [ngClass]="expandedId() === incident.id ? 'fa-chevron-up' : 'fa-chevron-down'"></i>
+                </button>
+              </td>
+            </tr>
+
+            <tr *ngIf="expandedId() === incident.id" class="gf-detail">
+              <td colspan="9">
+                <p class="small mb-2">{{ incident.description }}</p>
+
+                <div class="row g-3 small">
+                  <div class="col-12 col-lg-6">
+                    <dl class="row mb-0">
+                      <dt class="col-5 text-muted fw-normal">{{ '::GeoForge:Audit:Endpoint' | abpLocalization }}</dt>
+                      <dd class="col-7 gf-mono">{{ incident.endpoint || '—' }}</dd>
+
+                      <dt class="col-5 text-muted fw-normal">{{ '::GeoForge:Audit:ExceptionType' | abpLocalization }}</dt>
+                      <dd class="col-7 gf-mono">{{ incident.exceptionType || '—' }}</dd>
+
+                      <dt class="col-5 text-muted fw-normal">{{ '::GeoForge:Audit:CorrelationId' | abpLocalization }}</dt>
+                      <dd class="col-7 gf-mono">{{ incident.lastCorrelationId || '—' }}</dd>
+
+                      <dt class="col-5 text-muted fw-normal">{{ '::GeoForge:Incidents:AssignedTo' | abpLocalization }}</dt>
+                      <dd class="col-7">{{ incident.assignedToUserName || '—' }}</dd>
+
+                      <dt class="col-5 text-muted fw-normal">{{ '::GeoForge:Incidents:ResolvedAt' | abpLocalization }}</dt>
+                      <dd class="col-7">{{ incident.resolvedAt ? (incident.resolvedAt | date: 'short') : '—' }}</dd>
+
+                      <dt class="col-5 text-muted fw-normal">{{ '::GeoForge:Incidents:ResolutionNotes' | abpLocalization }}</dt>
+                      <dd class="col-7">{{ incident.resolutionNotes || '—' }}</dd>
+                    </dl>
+                  </div>
+
+                  <!-- Triage. The whole block is gated on the manage permission, so a reader
+                       sees the incident but cannot close it — and never sees the stack trace. -->
+                  <div class="col-12 col-lg-6" *abpPermission="'GeoForge.Incidents.Manage'">
+                    <label class="form-label small text-muted mb-1" [attr.for]="'notes-' + incident.id">
+                      {{ '::GeoForge:Incidents:ResolutionNotes' | abpLocalization }}
+                    </label>
+                    <textarea
+                      #notes
+                      [id]="'notes-' + incident.id"
+                      class="form-control form-control-sm mb-2"
+                      rows="2"
+                      [value]="incident.resolutionNotes || ''"
+                    ></textarea>
+
+                    <div class="btn-group btn-group-sm">
+                      <button
+                        type="button"
+                        class="btn btn-outline-secondary"
+                        *ngFor="let status of statuses"
+                        [disabled]="saving() === incident.id || incident.status === status"
+                        (click)="updateStatus(incident, status, notes.value)"
+                      >
+                        {{ statusKeys[status] | abpLocalization }}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Stack traces are returned by the API only to holders of Incidents.Manage;
+                     for anyone else this field arrives null and the block never renders. -->
+                <div class="mt-3" *ngIf="incident.stackTrace">
+                  <div class="small text-muted mb-1">{{ '::GeoForge:Incidents:StackTrace' | abpLocalization }}</div>
+                  <div class="gf-stack">{{ incident.stackTrace }}</div>
+                </div>
+              </td>
+            </tr>
+          </ng-container>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="d-flex justify-content-between align-items-center" *ngIf="totalCount() > pageSize">
+      <span class="text-muted small gf-num">{{ totalCount() | number }}</span>
+      <div>
+        <button class="btn btn-sm btn-outline-secondary me-1" [disabled]="page() === 0" (click)="previousPage()">
+          &lsaquo;
+        </button>
+        <button
+          class="btn btn-sm btn-outline-secondary"
+          [disabled]="(page() + 1) * pageSize >= totalCount()"
+          (click)="nextPage()"
+        >
+          &rsaquo;
+        </button>
+      </div>
+    </div>
+  </div>
+</div>

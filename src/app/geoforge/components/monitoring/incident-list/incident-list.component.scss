@@ -1,0 +1,22 @@
+@use '../monitoring-tables' as tables;
+
+@include tables.monitoring-tables;
+
+.gf-detail {
+  background: rgba(128, 128, 128, 0.06);
+}
+
+// A stack trace is preformatted text of unbounded width. It scrolls inside its own box; the
+// page body never scrolls sideways because of it.
+.gf-stack {
+  max-height: 18rem;
+  overflow: auto;
+  padding: 0.5rem 0.75rem;
+  border-radius: 0.25rem;
+  background: rgba(0, 0, 0, 0.35);
+  color: #e8e8e5;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.7rem;
+  line-height: 1.45;
+  white-space: pre;
+}

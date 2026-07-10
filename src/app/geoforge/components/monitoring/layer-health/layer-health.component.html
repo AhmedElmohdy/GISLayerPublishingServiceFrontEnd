@@ -1,0 +1,174 @@
+<div class="d-flex flex-wrap justify-content-between align-items-start gap-3 mb-3">
+  <div>
+    <h4 class="mb-0">{{ '::GeoForge:Health:Title' | abpLocalization }}</h4>
+    <div class="text-muted small" *ngIf="overview()?.lastCheckedAt">
+      {{ '::GeoForge:Health:LastChecked' | abpLocalization }}: {{ overview()!.lastCheckedAt | date: 'medium' }}
+    </div>
+  </div>
+
+  <div class="d-flex align-items-center gap-2">
+    <button type="button" class="btn btn-sm btn-outline-secondary" (click)="load()">
+      <i class="fas fa-rotate-right me-1" aria-hidden="true"></i>
+      {{ '::GeoForge:Dashboard:Refresh' | abpLocalization }}
+    </button>
+
+    <button
+      type="button"
+      class="btn btn-sm btn-primary"
+      *abpPermission="'GeoForge.Health.RunCheck'"
+      [disabled]="running()"
+      (click)="runCheck()"
+    >
+      <span *ngIf="running()" class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>
+      <i *ngIf="!running()" class="fas fa-heart-pulse me-1" aria-hidden="true"></i>
+      {{ '::GeoForge:Health:RunCheck' | abpLocalization }}
+    </button>
+  </div>
+</div>
+
+<div class="row g-3 mb-3">
+  <div class="col-12 col-lg-5">
+    <gf-panel [title]="'::GeoForge:Health:Title' | abpLocalization" [loading]="loading()" [error]="error()" (retry)="load()">
+      <gf-donut-chart
+        [slices]="slices()"
+        [centerLabel]="'::GeoForge:LayerUsage:Published' | abpLocalization"
+        [emptyMessage]="'::GeoForge:Dashboard:NoData' | abpLocalization"
+      ></gf-donut-chart>
+    </gf-panel>
+  </div>
+
+  <div class="col-12 col-lg-7">
+    <div class="row g-2 h-100">
+      <div class="col-6 col-xl-3">
+        <div class="card h-100">
+          <div class="card-body text-center">
+            <div class="fs-3 fw-semibold text-success">{{ overview()?.healthy ?? 0 }}</div>
+            <div class="small text-muted">{{ '::GeoForge:Health:Healthy' | abpLocalization }}</div>
+          </div>
+        </div>
+      </div>
+      <div class="col-6 col-xl-3">
+        <div class="card h-100">
+          <div class="card-body text-center">
+            <div class="fs-3 fw-semibold text-warning">{{ overview()?.degraded ?? 0 }}</div>
+            <div class="small text-muted">{{ '::GeoForge:Health:Degraded' | abpLocalization }}</div>
+          </div>
+        </div>
+      </div>
+      <div class="col-6 col-xl-3">
+        <div class="card h-100">
+          <div class="card-body text-center">
+            <div class="fs-3 fw-semibold text-danger">{{ overview()?.unavailable ?? 0 }}</div>
+            <div class="small text-muted">{{ '::GeoForge:Health:Unavailable' | abpLocalization }}</div>
+          </div>
+        </div>
+      </div>
+      <div class="col-6 col-xl-3">
+        <div class="card h-100">
+          <div class="card-body text-center">
+            <div class="fs-3 fw-semibold text-muted">{{ overview()?.neverChecked ?? 0 }}</div>
+            <div class="small text-muted">{{ '::GeoForge:Health:NeverChecked' | abpLocalization }}</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-body">
+    <div *ngIf="loading()" class="text-center py-4"><div class="spinner-border spinner-border-sm"></div></div>
+
+    <div *ngIf="!loading() && !error() && (overview()?.layers?.length ?? 0) === 0" class="text-center text-muted py-4 small">
+      {{ '::GeoForge:Dashboard:NoData' | abpLocalization }}
+    </div>
+
+    <div class="table-responsive" *ngIf="!loading() && !error() && (overview()?.layers?.length ?? 0) > 0">
+      <table class="table table-sm table-hover align-middle gf-table">
+        <thead>
+          <tr>
+            <th scope="col">{{ '::GeoForge:LayerUsage:Layer' | abpLocalization }}</th>
+            <th scope="col">{{ '::GeoForge:Health:Title' | abpLocalization }}</th>
+            <th scope="col" class="text-end">{{ '::GeoForge:Audit:ResponseTime' | abpLocalization }}</th>
+            <th scope="col">{{ '::GeoForge:Health:LastChecked' | abpLocalization }}</th>
+            <th scope="col">{{ '::GeoForge:Audit:ErrorMessage' | abpLocalization }}</th>
+            <th scope="col" class="text-end"></th>
+          </tr>
+        </thead>
+        <tbody>
+          <ng-container *ngFor="let layer of overview()!.layers">
+            <tr>
+              <td>
+                <a [routerLink]="['/geoforge/layers', layer.layerId, 'analytics']">{{ layer.displayName }}</a>
+                <div class="gf-mono text-muted">{{ layer.name }}</div>
+              </td>
+              <td>
+                <gf-status-badge
+                  [status]="layerHealthStatus(layer.status)"
+                  [label]="healthLabel(layer.status)"
+                ></gf-status-badge>
+              </td>
+              <td class="text-end gf-num">{{ layer.responseTimeMs | number }} ms</td>
+              <td class="small text-muted">{{ layer.checkedAt ? (layer.checkedAt | date: 'short') : '—' }}</td>
+              <td class="small text-muted">{{ layer.errorMessage || '—' }}</td>
+              <td class="text-end text-nowrap">
+                <button
+                  type="button"
+                  class="btn btn-sm btn-link p-0 me-2"
+                  *abpPermission="'GeoForge.Health.RunCheck'"
+                  [disabled]="running()"
+                  (click)="runCheck(layer.layerId)"
+                  [title]="'::GeoForge:Health:RunCheck' | abpLocalization"
+                >
+                  <i class="fas fa-heart-pulse" aria-hidden="true"></i>
+                </button>
+                <button type="button" class="btn btn-sm btn-link p-0" (click)="toggleDetails(layer)">
+                  <i class="fas" [ngClass]="expandedId() === layer.layerId ? 'fa-chevron-up' : 'fa-chevron-down'"></i>
+                </button>
+              </td>
+            </tr>
+
+            <tr *ngIf="expandedId() === layer.layerId" class="gf-detail">
+              <td colspan="6">
+                <div *ngIf="!details()[layer.layerId]" class="text-center py-2">
+                  <div class="spinner-border spinner-border-sm"></div>
+                </div>
+
+                <table class="table table-sm mb-0 gf-table" *ngIf="details()[layer.layerId] as detail">
+                  <thead>
+                    <tr>
+                      <th scope="col">{{ '::GeoForge:Health:CheckType' | abpLocalization }}</th>
+                      <th scope="col">{{ '::GeoForge:Incidents:Status' | abpLocalization }}</th>
+                      <th scope="col" class="text-end">{{ '::GeoForge:Audit:ResponseTime' | abpLocalization }}</th>
+                      <th scope="col">{{ '::GeoForge:Audit:ErrorCode' | abpLocalization }}</th>
+                      <th scope="col">{{ '::GeoForge:Audit:ErrorMessage' | abpLocalization }}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr *ngIf="detail.checks.length === 0">
+                      <td colspan="5" class="text-muted small text-center">
+                        {{ '::GeoForge:Health:NeverChecked' | abpLocalization }}
+                      </td>
+                    </tr>
+                    <tr *ngFor="let check of detail.checks">
+                      <td>{{ checkTypeKeys[check.checkType] | abpLocalization }}</td>
+                      <td>
+                        <gf-status-badge
+                          [status]="layerHealthStatus(check.status)"
+                          [label]="healthLabel(check.status)"
+                        ></gf-status-badge>
+                      </td>
+                      <td class="text-end gf-num">{{ check.responseTimeMs | number }} ms</td>
+                      <td class="gf-mono small">{{ check.errorCode || '—' }}</td>
+                      <td class="small text-muted">{{ check.errorMessage || '—' }}</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </td>
+            </tr>
+          </ng-container>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
