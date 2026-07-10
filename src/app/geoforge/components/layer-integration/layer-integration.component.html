@@ -1,0 +1,125 @@
+<!-- The secret, shown once. Deliberately loud, and deliberately not dismissable by accident. -->
+<div class="alert alert-warning" *ngIf="revealedSecret() as revealed">
+  <h6 class="alert-heading">Copy this secret now</h6>
+  <p class="mb-2">
+    It is stored only as a hash. Closing this box is the last time you will see it — if it is
+    lost, rotate the secret to mint a new one.
+  </p>
+  <div class="d-flex align-items-center gap-2 mb-2">
+    <code class="flex-grow-1 p-2 bg-body-secondary rounded text-break">{{ revealed.secret }}</code>
+    <button class="btn btn-sm btn-outline-secondary" (click)="copy(revealed.secret)">Copy</button>
+  </div>
+  <div class="small">
+    Client id: <code>{{ revealed.clientId }}</code>
+  </div>
+  <button class="btn btn-sm btn-warning mt-2" (click)="dismissSecret()">I have copied it</button>
+</div>
+
+<div class="alert alert-secondary" *ngIf="!featureServerUrl()">
+  Publish this layer to generate its endpoint URLs and integration examples.
+</div>
+
+<ng-container *ngIf="featureServerUrl()">
+  <!-- ---- Access credentials ---- -->
+  <div class="card mb-3">
+    <div class="card-header">
+      <h6 class="card-title mb-0">Access credentials</h6>
+      <small class="text-muted">
+        <ng-container *ngIf="layer.isPublic">
+          This layer is public, so no credential is required to read it. Credentials below still
+          apply if you make it private.
+        </ng-container>
+        <ng-container *ngIf="!layer.isPublic">
+          A client can read only the layers it has been granted.
+        </ng-container>
+      </small>
+    </div>
+
+    <div class="card-body">
+      <div class="d-flex gap-2 mb-3">
+        <input class="form-control" placeholder="New client name, e.g. Reporting Integration"
+               [value]="newClientName()"
+               (input)="newClientName.set($any($event.target).value)"
+               (keyup.enter)="createClient()" />
+        <button class="btn btn-primary text-nowrap"
+                [disabled]="!newClientName().trim() || busy()"
+                (click)="createClient()">
+          <span *ngIf="busy()" class="spinner-border spinner-border-sm me-2"></span>
+          Create client
+        </button>
+      </div>
+
+      <div *ngIf="loading()" class="text-center py-3">
+        <div class="spinner-border spinner-border-sm"></div>
+      </div>
+
+      <p class="text-muted mb-0" *ngIf="!loading() && clients().length === 0">
+        No client can read this layer yet.
+      </p>
+
+      <div class="table-responsive" *ngIf="!loading() && clients().length">
+        <table class="table table-sm align-middle mb-0">
+          <thead>
+            <tr>
+              <th>Client id</th>
+              <th>Name</th>
+              <th>Status</th>
+              <th>Last used</th>
+              <th class="text-end">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr *ngFor="let c of clients()">
+              <td><code>{{ c.clientId }}</code></td>
+              <td>{{ c.name }}</td>
+              <td>
+                <span class="badge" [class.bg-success]="c.isEnabled" [class.bg-secondary]="!c.isEnabled">
+                  {{ c.isEnabled ? 'Enabled' : 'Disabled' }}
+                </span>
+              </td>
+              <td class="text-muted small">{{ c.lastUsedAt ? (c.lastUsedAt | date: 'short') : 'never' }}</td>
+              <td class="text-end text-nowrap">
+                <button class="btn btn-sm btn-outline-secondary me-1" (click)="copy(c.clientId)">Copy id</button>
+                <button class="btn btn-sm btn-outline-warning me-1" (click)="rotateSecret(c)">Rotate secret</button>
+                <button class="btn btn-sm btn-outline-secondary me-1" (click)="toggleEnabled(c)">
+                  {{ c.isEnabled ? 'Disable' : 'Enable' }}
+                </button>
+                <button class="btn btn-sm btn-outline-danger" (click)="revokeLayer(c)">Revoke</button>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- ---- Step-by-step guide ---- -->
+  <div class="card">
+    <div class="card-header d-flex justify-content-between align-items-center">
+      <div>
+        <h6 class="card-title mb-0">Integration guide</h6>
+        <small class="text-muted">Copy-paste ready, generated from this layer's own endpoints.</small>
+      </div>
+      <div class="text-end small">
+        <div class="text-muted">Token endpoint</div>
+        <code>{{ tokenUrl }}</code>
+      </div>
+    </div>
+
+    <div class="card-body">
+      <div class="mb-4" *ngFor="let step of steps()">
+        <div class="d-flex justify-content-between align-items-start">
+          <div>
+            <div class="fw-bold">{{ step.title }}</div>
+            <div class="text-muted small mb-2" *ngIf="step.note">{{ step.note }}</div>
+          </div>
+          <button class="btn btn-sm btn-outline-secondary text-nowrap ms-2" (click)="copy(step.code)">
+            Copy
+          </button>
+        </div>
+
+        <pre class="bg-body-secondary rounded p-3 mb-0" style="overflow-x: auto"><code>{{ step.code }}</code></pre>
+      </div>
+    </div>
+  </div>
+</ng-container>

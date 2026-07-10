@@ -3,6 +3,7 @@ import { SharedModule } from '../shared/shared.module';
 import { GeoForgeRoutingModule } from './geoforge-routing.module';
 import { DataSourceUploadComponent } from './components/data-source-upload/data-source-upload.component';
 import { LayerDetailComponent } from './components/layer-detail/layer-detail.component';
+import { LayerIntegrationComponent } from './components/layer-integration/layer-integration.component';
 import { LayerListComponent } from './components/layer-list/layer-list.component';
 import { LayerMapComponent } from './components/layer-map/layer-map.component';
 
@@ -18,6 +19,7 @@ import { LayerMapComponent } from './components/layer-map/layer-map.component';
   declarations: [
     LayerListComponent,
     LayerDetailComponent,
+    LayerIntegrationComponent,
     LayerMapComponent,
     DataSourceUploadComponent,
   ],

@@ -19,7 +19,7 @@ interface ConsumerEndpoint {
   note: string;
 }
 
-export type LayerDetailTab = 'overview' | 'fields' | 'endpoints' | 'map';
+export type LayerDetailTab = 'overview' | 'fields' | 'endpoints' | 'integration' | 'map';
 
 @Component({
   selector: 'app-layer-detail',

@@ -368,6 +368,59 @@ export interface RemoteServiceMetadata {
   message?: string;
 }
 
+// ---- API clients (machine-to-machine access) -------------------------------
+
+/** A layer an API client may read. */
+export interface ApiClientLayer {
+  layerId: string;
+  name: string;
+  displayName: string;
+}
+
+/** An API client as any read API returns it. The secret is never present here. */
+export interface ApiClient {
+  id: string;
+  name: string;
+  clientId: string;
+  description?: string;
+  isEnabled: boolean;
+  expiresAt?: string;
+  lastUsedAt?: string;
+  grantedLayers: ApiClientLayer[];
+  creationTime: string;
+}
+
+/** Returned exactly once, by create and by rotate. The secret is not recoverable afterwards. */
+export interface ApiClientSecret {
+  client: ApiClient;
+  secret: string;
+}
+
+export interface CreateApiClient {
+  name: string;
+  clientId?: string;
+  secret?: string;
+  description?: string;
+  expiresAt?: string;
+  grantedLayerIds: string[];
+}
+
+export interface UpdateApiClient {
+  name: string;
+  description?: string;
+  isEnabled: boolean;
+  expiresAt?: string;
+  grantedLayerIds: string[];
+}
+
+/** The token endpoint's response. `accessToken` is opaque — the expiry is stated, not embedded. */
+export interface TokenResponse {
+  accessToken: string;
+  tokenType: string;
+  expiresIn: number;
+  expiresAt: string;
+}
+
 /** The source kinds the wizard offers, grouped by how the payload arrives. */
 export interface SourceTypeOption {
   value: string;

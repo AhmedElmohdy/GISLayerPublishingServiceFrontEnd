@@ -3,6 +3,9 @@ import { Injectable, inject } from '@angular/core';
 import { Observable } from 'rxjs';
 import { environment } from '../../../environments/environment';
 import {
+  ApiClient,
+  ApiClientSecret,
+  CreateApiClient,
   CreateRemoteDataSource,
   DataSource,
   GisLayer,
@@ -15,6 +18,7 @@ import {
   PagedResult,
   RemoteServiceMetadata,
   SourceProbeResult,
+  UpdateApiClient,
   UploadResult,
 } from '../models/geoforge.models';
 
@@ -203,5 +207,40 @@ export class GeoForgeService {
   /** URL of the rejected-rows CSV. An import never silently drops data. */
   rejectedRowsUrl(id: string): string {
     return `${this.base}/import-jobs/${id}/rejected-rows`;
+  }
+
+  // ---- API clients ---------------------------------------------------------
+
+  /** Clients granted a given layer. Used by the layer's Integration Helper tab. */
+  getApiClients(params: Record<string, unknown> = {}): Observable<PagedResult<ApiClient>> {
+    return this.http.get<PagedResult<ApiClient>>(`${this.base}/api-clients`, {
+      params: queryParams(params),
+    });
+  }
+
+  /**
+   * Creates a client and returns its secret. This is the only response that ever carries it —
+   * no later read will, so the caller must surface it immediately.
+   */
+  createApiClient(input: CreateApiClient): Observable<ApiClientSecret> {
+    return this.http.post<ApiClientSecret>(`${this.base}/api-clients`, input);
+  }
+
+  updateApiClient(id: string, input: UpdateApiClient): Observable<ApiClient> {
+    return this.http.put<ApiClient>(`${this.base}/api-clients/${id}`, input);
+  }
+
+  /** Mints a new secret. Every token issued from the previous one stops working at once. */
+  rotateApiClientSecret(id: string): Observable<ApiClientSecret> {
+    return this.http.post<ApiClientSecret>(`${this.base}/api-clients/${id}/rotate-secret`, {});
+  }
+
+  deleteApiClient(id: string): Observable<void> {
+    return this.http.delete<void>(`${this.base}/api-clients/${id}`);
+  }
+
+  /** The token endpoint external systems call. Exposed so the UI can name it in its examples. */
+  get tokenUrl(): string {
+    return `${this.base}/auth/token`;
   }
 }

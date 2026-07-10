@@ -65,12 +65,24 @@
                   (click)="selectTab('endpoints')">Endpoints</button>
         </li>
         <li class="nav-item">
+          <button type="button" class="nav-link" [class.active]="activeTab() === 'integration'"
+                  (click)="selectTab('integration')">
+            Integration Helper
+            <i class="bi bi-shield-lock ms-1" *ngIf="!l.isPublic" title="This layer requires a token"></i>
+          </button>
+        </li>
+        <li class="nav-item">
           <button type="button" class="nav-link" [class.active]="activeTab() === 'map'"
                   [disabled]="!canPreview()"
                   [title]="canPreview() ? '' : 'Publish the layer to preview it'"
                   (click)="selectTab('map')">Map</button>
         </li>
       </ul>
+
+      <!-- ---- Integration Helper tab ---- -->
+      <div *ngIf="activeTab() === 'integration'">
+        <app-layer-integration [layer]="l"></app-layer-integration>
+      </div>
 
       <div class="row" [class.d-none]="activeTab() !== 'overview'">
         <div class="col-md-3">
