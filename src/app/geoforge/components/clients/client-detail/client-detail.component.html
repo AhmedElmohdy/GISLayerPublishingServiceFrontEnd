@@ -1,0 +1,280 @@
+<a [routerLink]="['/geoforge/clients']" class="text-decoration-none small">
+  ‹ {{ '::GeoForge:ClientDetail:Back' | abpLocalization }}
+</a>
+
+<div *ngIf="loading()" class="text-center py-5">
+  <div class="spinner-border"></div>
+</div>
+
+<ng-container *ngIf="!loading() && client() as c">
+  <!-- Secret from a rotate, shown once. -->
+  <div class="alert alert-warning mt-2" *ngIf="revealedSecret() as secret">
+    <h6 class="alert-heading">{{ '::GeoForge:Client:Secret:CopyNow' | abpLocalization }}</h6>
+    <p class="mb-2">{{ '::GeoForge:Client:Secret:Explain' | abpLocalization }}</p>
+    <div class="d-flex align-items-center gap-2 mb-2">
+      <code class="flex-grow-1 p-2 bg-body-secondary rounded text-break">{{ secret }}</code>
+      <button class="btn btn-sm btn-outline-secondary" (click)="copy(secret)">
+        {{ '::GeoForge:Common:CopyId' | abpLocalization }}
+      </button>
+    </div>
+    <button class="btn btn-sm btn-warning" (click)="dismissSecret()">
+      {{ '::GeoForge:Client:Secret:Copied' | abpLocalization }}
+    </button>
+  </div>
+
+  <!-- Header -->
+  <div class="d-flex justify-content-between align-items-start flex-wrap gap-2 mt-2 mb-3">
+    <div>
+      <h4 class="mb-1">
+        {{ c.name }}
+        <span class="badge ms-2" [ngClass]="statusBadgeClass[c.effectiveStatus]">
+          {{ statusLabelKeys[c.effectiveStatus] | abpLocalization }}
+        </span>
+      </h4>
+      <code>{{ c.clientId }}</code>
+    </div>
+    <div class="btn-group btn-group-sm">
+      <button class="btn btn-outline-success" *ngIf="!isActive(c)"
+              [disabled]="c.status === ApiClientStatus.Revoked" (click)="activate()">
+        {{ '::GeoForge:ClientAdmin:Action:Activate' | abpLocalization }}
+      </button>
+      <button class="btn btn-outline-warning"
+              *ngIf="c.status !== ApiClientStatus.Suspended && c.status !== ApiClientStatus.Revoked"
+              (click)="suspend()">
+        {{ '::GeoForge:ClientAdmin:Action:Suspend' | abpLocalization }}
+      </button>
+      <button class="btn btn-outline-danger" *ngIf="c.status !== ApiClientStatus.Revoked" (click)="revoke()">
+        {{ '::GeoForge:ClientAdmin:Action:Revoke' | abpLocalization }}
+      </button>
+    </div>
+  </div>
+
+  <!-- Tabs -->
+  <ul class="nav nav-tabs mb-3">
+    <li class="nav-item">
+      <a class="nav-link" [class.active]="tab() === 'overview'" role="button" (click)="selectTab('overview')">
+        {{ '::GeoForge:ClientDetail:Tab:Overview' | abpLocalization }}
+      </a>
+    </li>
+    <li class="nav-item">
+      <a class="nav-link" [class.active]="tab() === 'credentials'" role="button" (click)="selectTab('credentials')">
+        {{ '::GeoForge:ClientDetail:Tab:Credentials' | abpLocalization }}
+      </a>
+    </li>
+    <li class="nav-item">
+      <a class="nav-link" [class.active]="tab() === 'layers'" role="button" (click)="selectTab('layers')">
+        {{ '::GeoForge:ClientDetail:Tab:Layers' | abpLocalization }}
+        <span class="badge bg-secondary ms-1">{{ c.grantedLayerCount }}</span>
+      </a>
+    </li>
+    <li class="nav-item">
+      <a class="nav-link" [class.active]="tab() === 'usage'" role="button" (click)="selectTab('usage')">
+        {{ '::GeoForge:ClientDetail:Tab:Usage' | abpLocalization }}
+      </a>
+    </li>
+    <li class="nav-item">
+      <a class="nav-link" [class.active]="tab() === 'audit'" role="button" (click)="selectTab('audit')">
+        {{ '::GeoForge:ClientDetail:Tab:Audit' | abpLocalization }}
+      </a>
+    </li>
+  </ul>
+
+  <!-- ==== Overview ==== -->
+  <div *ngIf="tab() === 'overview'" class="row g-3">
+    <div class="col-md-6">
+      <div class="card h-100">
+        <div class="card-body">
+          <dl class="row mb-0 small">
+            <dt class="col-5 text-muted">{{ '::GeoForge:ClientDetail:Description' | abpLocalization }}</dt>
+            <dd class="col-7">{{ c.description || '—' }}</dd>
+            <dt class="col-5 text-muted">{{ '::GeoForge:ClientDetail:CreatedAt' | abpLocalization }}</dt>
+            <dd class="col-7">{{ c.creationTime | date: 'medium' }}</dd>
+            <dt class="col-5 text-muted">{{ '::GeoForge:ClientDetail:LastUsed' | abpLocalization }}</dt>
+            <dd class="col-7">{{ c.lastUsedAt ? (c.lastUsedAt | date: 'medium') : ('::GeoForge:Common:Never' | abpLocalization) }}</dd>
+            <dt class="col-5 text-muted">{{ '::GeoForge:ClientDetail:Expiration' | abpLocalization }}</dt>
+            <dd class="col-7">{{ c.expiresAt ? (c.expiresAt | date: 'medium') : ('::GeoForge:Client:Field:NeverExpires' | abpLocalization) }}</dd>
+            <dt class="col-5 text-muted">{{ '::GeoForge:ClientDetail:IpRestrictions' | abpLocalization }}</dt>
+            <dd class="col-7">
+              <code *ngIf="c.allowedIpAddresses">{{ c.allowedIpAddresses }}</code>
+              <span class="text-muted" *ngIf="!c.allowedIpAddresses">
+                {{ '::GeoForge:ClientDetail:NoIpRestrictions' | abpLocalization }}
+              </span>
+            </dd>
+            <dt class="col-5 text-muted">{{ '::GeoForge:ClientDetail:Notes' | abpLocalization }}</dt>
+            <dd class="col-7">{{ c.notes || '—' }}</dd>
+          </dl>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-6">
+      <div class="card h-100">
+        <div class="card-body">
+          <h6 class="card-title">{{ '::GeoForge:ClientDetail:QuotaInfo' | abpLocalization }}</h6>
+          <ng-container *ngIf="c.quotaType === ClientQuotaType.Limited; else unlimitedQuota">
+            <div class="d-flex justify-content-between small mb-1">
+              <span>{{ '::GeoForge:Client:Quota:UsedOfLimit' | abpLocalization: (c.usedRequests + '') : ((c.quotaLimit ?? 0) + '') }}</span>
+              <span [class.text-danger]="c.isQuotaExhausted">
+                {{ c.isQuotaExhausted
+                  ? ('::GeoForge:Client:Quota:Exhausted' | abpLocalization)
+                  : ('::GeoForge:Client:Quota:Remaining' | abpLocalization: ((c.remainingRequests ?? 0) + '')) }}
+              </span>
+            </div>
+            <div class="progress" style="height: 8px">
+              <div class="progress-bar" [ngClass]="quotaBarClass(c)" [style.width.%]="quotaPercent(c)"></div>
+            </div>
+            <button class="btn btn-sm btn-outline-secondary mt-3" (click)="resetQuota()">
+              {{ '::GeoForge:ClientAdmin:Action:ResetQuota' | abpLocalization }}
+            </button>
+          </ng-container>
+          <ng-template #unlimitedQuota>
+            <p class="text-muted mb-0">{{ '::GeoForge:Client:Quota:Unlimited' | abpLocalization }}</p>
+          </ng-template>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==== Credentials ==== -->
+  <div *ngIf="tab() === 'credentials'" class="card">
+    <div class="card-body">
+      <dl class="row mb-3 small">
+        <dt class="col-4 col-md-3 text-muted">{{ '::GeoForge:ClientDetail:Cred:ClientId' | abpLocalization }}</dt>
+        <dd class="col-8 col-md-9">
+          <code>{{ c.clientId }}</code>
+          <button class="btn btn-sm btn-outline-secondary ms-2" (click)="copy(c.clientId)">
+            {{ '::GeoForge:Common:CopyId' | abpLocalization }}
+          </button>
+        </dd>
+        <dt class="col-4 col-md-3 text-muted">{{ '::GeoForge:ClientDetail:Cred:Secret' | abpLocalization }}</dt>
+        <dd class="col-8 col-md-9">
+          <span class="text-muted">••••••••</span>
+          <span class="ms-2" *ngIf="c.secretHint">
+            ({{ '::GeoForge:ClientDetail:Cred:Hint' | abpLocalization }} <code>{{ c.secretHint }}</code>)
+          </span>
+          <div class="form-text">{{ '::GeoForge:ClientDetail:Cred:SecretHidden' | abpLocalization }}</div>
+        </dd>
+        <dt class="col-4 col-md-3 text-muted">{{ '::GeoForge:ClientDetail:Cred:LastRotated' | abpLocalization }}</dt>
+        <dd class="col-8 col-md-9">
+          {{ c.lastSecretRotatedAt ? (c.lastSecretRotatedAt | date: 'medium') : '—' }}
+        </dd>
+      </dl>
+      <button class="btn btn-outline-warning" (click)="rotateSecret()">
+        {{ '::GeoForge:ClientAdmin:Action:RotateSecret' | abpLocalization }}
+      </button>
+    </div>
+  </div>
+
+  <!-- ==== Assigned layers ==== -->
+  <div *ngIf="tab() === 'layers'" class="card">
+    <div class="card-body">
+      <div class="d-flex gap-2 mb-3">
+        <select class="form-select" style="max-width: 320px"
+                [value]="selectedLayerToGrant()"
+                (change)="selectedLayerToGrant.set($any($event.target).value)">
+          <option value="">{{ '::GeoForge:ClientDetail:Layers:GrantMore' | abpLocalization }}…</option>
+          <option *ngFor="let l of grantableLayers()" [value]="l.id">{{ l.displayName }}</option>
+        </select>
+        <button class="btn btn-primary" [disabled]="!selectedLayerToGrant()" (click)="grantLayer()">
+          {{ '::GeoForge:Integration:GrantAccess' | abpLocalization }}
+        </button>
+      </div>
+
+      <div *ngIf="loadingLayers()" class="text-center py-3">
+        <div class="spinner-border spinner-border-sm"></div>
+      </div>
+
+      <p class="text-muted mb-0" *ngIf="!loadingLayers() && layers().length === 0">
+        {{ '::GeoForge:ClientDetail:Layers:Empty' | abpLocalization }}
+      </p>
+
+      <div class="table-responsive" *ngIf="!loadingLayers() && layers().length">
+        <table class="table table-sm align-middle mb-0">
+          <thead>
+            <tr>
+              <th>{{ '::GeoForge:ClientDetail:Layers:Col:Layer' | abpLocalization }}</th>
+              <th class="text-end">{{ '::GeoForge:ClientDetail:Layers:Col:Requests' | abpLocalization }}</th>
+              <th>{{ '::GeoForge:Common:LastAccessed' | abpLocalization }}</th>
+              <th>{{ '::GeoForge:ClientDetail:Layers:Col:Enabled' | abpLocalization }}</th>
+              <th class="text-end">{{ '::GeoForge:Common:Actions' | abpLocalization }}</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr *ngFor="let l of layers()">
+              <td>
+                <a [routerLink]="['/geoforge/layers', l.layerId]" class="text-decoration-none">{{ l.displayName }}</a>
+                <div><code class="small">{{ l.name }}</code></div>
+              </td>
+              <td class="text-end">{{ l.usedRequests }}</td>
+              <td class="text-muted small">
+                {{ l.lastAccessedAt ? (l.lastAccessedAt | date: 'short') : ('::GeoForge:Common:Never' | abpLocalization) }}
+              </td>
+              <td>
+                <span class="badge" [class.bg-success]="l.isEnabled" [class.bg-secondary]="!l.isEnabled">
+                  {{ l.isEnabled ? ('::GeoForge:Clients:Enabled' | abpLocalization) : ('::GeoForge:Clients:Disabled' | abpLocalization) }}
+                </span>
+              </td>
+              <td class="text-end text-nowrap">
+                <button class="btn btn-sm btn-outline-secondary me-1" (click)="toggleLayerEnabled(l)">
+                  {{ l.isEnabled ? ('::GeoForge:ClientDetail:Layers:Disable' | abpLocalization) : ('::GeoForge:ClientDetail:Layers:Enable' | abpLocalization) }}
+                </button>
+                <button class="btn btn-sm btn-outline-danger" (click)="revokeLayer(l)">
+                  {{ '::GeoForge:Common:RemoveAccess' | abpLocalization }}
+                </button>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==== Usage analytics ==== -->
+  <div *ngIf="tab() === 'usage'" class="card">
+    <div class="card-body text-center py-4">
+      <p class="text-muted">{{ '::GeoForge:ClientDetail:Tab:Usage' | abpLocalization }}</p>
+      <a class="btn btn-outline-primary" [routerLink]="['/geoforge/clients', clientId(), 'analytics']">
+        {{ '::GeoForge:ClientDetail:OpenFullAnalytics' | abpLocalization }}
+      </a>
+    </div>
+  </div>
+
+  <!-- ==== Audit ==== -->
+  <div *ngIf="tab() === 'audit'" class="card">
+    <div class="card-body">
+      <div *ngIf="loadingAudit()" class="text-center py-3">
+        <div class="spinner-border spinner-border-sm"></div>
+      </div>
+      <p class="text-muted mb-0" *ngIf="!loadingAudit() && auditLog().length === 0">
+        {{ '::GeoForge:ClientDetail:Audit:Empty' | abpLocalization }}
+      </p>
+      <div class="table-responsive" *ngIf="!loadingAudit() && auditLog().length">
+        <table class="table table-sm align-middle mb-0">
+          <thead>
+            <tr>
+              <th>{{ '::GeoForge:ClientDetail:Audit:Col:Action' | abpLocalization }}</th>
+              <th>{{ '::GeoForge:ClientDetail:Audit:Col:By' | abpLocalization }}</th>
+              <th>{{ '::GeoForge:ClientDetail:Audit:Col:When' | abpLocalization }}</th>
+              <th>{{ '::GeoForge:ClientDetail:Audit:Col:Change' | abpLocalization }}</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr *ngFor="let a of auditLog()">
+              <td>
+                {{ auditActionLabel(a.action) }}
+                <div class="small text-muted" *ngIf="a.layerName">{{ a.layerName }}</div>
+              </td>
+              <td class="small">{{ a.actorUserName || '—' }}</td>
+              <td class="text-muted small">{{ a.creationTime | date: 'short' }}</td>
+              <td class="small">
+                <span *ngIf="a.oldValue || a.newValue">
+                  <span class="text-muted">{{ a.oldValue || '—' }}</span>
+                  → <span>{{ a.newValue || '—' }}</span>
+                </span>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</ng-container>

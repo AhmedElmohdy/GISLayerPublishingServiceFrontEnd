@@ -4,21 +4,27 @@ import { Observable } from 'rxjs';
 import { environment } from '../../../environments/environment';
 import {
   ApiClient,
+  ApiClientLayer,
   ApiClientSecret,
+  AvailableClient,
+  ClientAuditLog,
   CreateApiClient,
   CreateRemoteDataSource,
   DataSource,
   GisLayer,
   GisLayerListItem,
+  GrantLayerAccess,
   ImportJob,
   ImportJobLog,
   ImportRequest,
+  LayerClient,
   LayerField,
   LayerStyle,
   PagedResult,
   RemoteServiceMetadata,
   SourceProbeResult,
   UpdateApiClient,
+  UpdateQuota,
   UploadResult,
 } from '../models/geoforge.models';
 
@@ -226,6 +232,10 @@ export class GeoForgeService {
     return this.http.post<ApiClientSecret>(`${this.base}/api-clients`, input);
   }
 
+  getApiClient(id: string): Observable<ApiClient> {
+    return this.http.get<ApiClient>(`${this.base}/api-clients/${id}`);
+  }
+
   updateApiClient(id: string, input: UpdateApiClient): Observable<ApiClient> {
     return this.http.put<ApiClient>(`${this.base}/api-clients/${id}`, input);
   }
@@ -237,6 +247,102 @@ export class GeoForgeService {
 
   deleteApiClient(id: string): Observable<void> {
     return this.http.delete<void>(`${this.base}/api-clients/${id}`);
+  }
+
+  // ---- Client status -------------------------------------------------------
+
+  activateApiClient(id: string): Observable<ApiClient> {
+    return this.http.post<ApiClient>(`${this.base}/api-clients/${id}/activate`, {});
+  }
+
+  suspendApiClient(id: string): Observable<ApiClient> {
+    return this.http.post<ApiClient>(`${this.base}/api-clients/${id}/suspend`, {});
+  }
+
+  revokeApiClient(id: string): Observable<ApiClient> {
+    return this.http.post<ApiClient>(`${this.base}/api-clients/${id}/revoke`, {});
+  }
+
+  bulkSuspendApiClients(ids: string[]): Observable<number> {
+    return this.http.post<number>(`${this.base}/api-clients/bulk-suspend`, ids);
+  }
+
+  // ---- Client quota --------------------------------------------------------
+
+  updateApiClientQuota(id: string, input: UpdateQuota): Observable<ApiClient> {
+    return this.http.put<ApiClient>(`${this.base}/api-clients/${id}/quota`, input);
+  }
+
+  increaseApiClientQuota(id: string, additionalRequests: number): Observable<ApiClient> {
+    return this.http.post<ApiClient>(`${this.base}/api-clients/${id}/quota/increase`, {
+      additionalRequests,
+    });
+  }
+
+  resetApiClientQuota(id: string): Observable<ApiClient> {
+    return this.http.post<ApiClient>(`${this.base}/api-clients/${id}/quota/reset`, {});
+  }
+
+  // ---- Layer access --------------------------------------------------------
+
+  /** Candidates for the layer page's "choose an existing client" picker. */
+  getAvailableClientsForLayer(
+    layerId: string,
+    params: Record<string, unknown> = {},
+  ): Observable<PagedResult<AvailableClient>> {
+    return this.http.get<PagedResult<AvailableClient>>(
+      `${this.base}/layers/${layerId}/available-clients`,
+      { params: queryParams(params) },
+    );
+  }
+
+  /** The clients that currently read a layer, with their per-layer counters. */
+  getLayerClients(layerId: string): Observable<LayerClient[]> {
+    return this.http.get<LayerClient[]>(`${this.base}/layers/${layerId}/clients`);
+  }
+
+  /** Grants one layer to several clients at once. Returns how many were newly granted. */
+  bulkGrantClientsToLayer(layerId: string, apiClientIds: string[]): Observable<number> {
+    return this.http.post<number>(`${this.base}/layers/${layerId}/clients`, { apiClientIds });
+  }
+
+  getClientLayers(id: string): Observable<ApiClientLayer[]> {
+    return this.http.get<ApiClientLayer[]>(`${this.base}/api-clients/${id}/layers`);
+  }
+
+  /** Grants one layer to one client. 409 when the grant already exists. */
+  grantLayerAccess(id: string, input: GrantLayerAccess): Observable<ApiClientLayer> {
+    return this.http.post<ApiClientLayer>(`${this.base}/api-clients/${id}/layers`, input);
+  }
+
+  revokeLayerAccess(id: string, layerId: string): Observable<void> {
+    return this.http.delete<void>(`${this.base}/api-clients/${id}/layers/${layerId}`);
+  }
+
+  setLayerAccessEnabled(id: string, layerId: string, isEnabled: boolean): Observable<ApiClientLayer> {
+    return this.http.put<ApiClientLayer>(
+      `${this.base}/api-clients/${id}/layers/${layerId}/enabled`,
+      { isEnabled },
+    );
+  }
+
+  bulkGrantLayerAccess(id: string, layerIds: string[]): Observable<number> {
+    return this.http.post<number>(`${this.base}/api-clients/${id}/layers/bulk-grant`, { layerIds });
+  }
+
+  bulkRevokeLayerAccess(id: string, layerIds: string[]): Observable<number> {
+    return this.http.post<number>(`${this.base}/api-clients/${id}/layers/bulk-revoke`, { layerIds });
+  }
+
+  // ---- Client audit --------------------------------------------------------
+
+  getClientAuditLog(
+    id: string,
+    params: Record<string, unknown> = {},
+  ): Observable<PagedResult<ClientAuditLog>> {
+    return this.http.get<PagedResult<ClientAuditLog>>(`${this.base}/api-clients/${id}/audit-log`, {
+      params: queryParams(params),
+    });
   }
 
   /** The token endpoint external systems call. Exposed so the UI can name it in its examples. */

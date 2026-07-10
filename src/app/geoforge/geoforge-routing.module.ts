@@ -4,6 +4,8 @@ import { authGuard, permissionGuard } from '@abp/ng.core';
 import { DataSourceUploadComponent } from './components/data-source-upload/data-source-upload.component';
 import { LayerDetailComponent } from './components/layer-detail/layer-detail.component';
 import { LayerListComponent } from './components/layer-list/layer-list.component';
+import { ClientDetailComponent } from './components/clients/client-detail/client-detail.component';
+import { ClientListComponent } from './components/clients/client-list/client-list.component';
 import { AuditLogListComponent } from './components/monitoring/audit-log-list/audit-log-list.component';
 import { ClientAnalyticsComponent } from './components/monitoring/client-analytics/client-analytics.component';
 import { GeoForgeDashboardComponent } from './components/monitoring/geoforge-dashboard/geoforge-dashboard.component';
@@ -47,10 +49,24 @@ const routes: Routes = [
     data: { requiredPolicy: 'GeoForge.Layers' },
   },
   {
+    path: 'clients',
+    component: ClientListComponent,
+    canActivate: [authGuard, permissionGuard],
+    data: { requiredPolicy: 'GeoForge.ApiClients' },
+  },
+  {
+    // Declared before 'clients/:id' so the wildcard does not swallow it — Angular matches in
+    // declaration order.
     path: 'clients/:id/analytics',
     component: ClientAnalyticsComponent,
     canActivate: [authGuard, permissionGuard],
     data: { requiredPolicy: 'GeoForge.Analytics' },
+  },
+  {
+    path: 'clients/:id',
+    component: ClientDetailComponent,
+    canActivate: [authGuard, permissionGuard],
+    data: { requiredPolicy: 'GeoForge.ApiClients' },
   },
   {
     path: 'audit-logs',

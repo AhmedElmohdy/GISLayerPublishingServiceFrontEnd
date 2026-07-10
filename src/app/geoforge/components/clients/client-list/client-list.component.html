@@ -1,0 +1,213 @@
+<!-- Secret from a rotate, shown once. -->
+<div class="alert alert-warning" *ngIf="revealedSecret() as revealed">
+  <h6 class="alert-heading">{{ '::GeoForge:Client:Secret:CopyNow' | abpLocalization }}</h6>
+  <p class="mb-2">{{ '::GeoForge:Client:Secret:Explain' | abpLocalization }}</p>
+  <div class="d-flex align-items-center gap-2 mb-2">
+    <code class="flex-grow-1 p-2 bg-body-secondary rounded text-break">{{ revealed.secret }}</code>
+    <button class="btn btn-sm btn-outline-secondary" (click)="copy(revealed.secret)">
+      {{ '::GeoForge:Common:CopyId' | abpLocalization }}
+    </button>
+  </div>
+  <div class="small">
+    {{ '::GeoForge:Clients:ClientId' | abpLocalization }}: <code>{{ revealed.clientId }}</code>
+  </div>
+  <button class="btn btn-sm btn-warning mt-2" (click)="dismissSecret()">
+    {{ '::GeoForge:Client:Secret:Copied' | abpLocalization }}
+  </button>
+</div>
+
+<div class="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-3">
+  <div>
+    <h4 class="mb-0">{{ '::GeoForge:ClientAdmin:Title' | abpLocalization }}</h4>
+    <small class="text-muted">{{ '::GeoForge:ClientAdmin:Subtitle' | abpLocalization }}</small>
+  </div>
+</div>
+
+<!-- Filters -->
+<div class="card mb-3">
+  <div class="card-body">
+    <div class="row g-2">
+      <div class="col-md-4">
+        <input
+          class="form-control"
+          [placeholder]="'::GeoForge:ClientAdmin:SearchPlaceholder' | abpLocalization"
+          [value]="filters().filter"
+          (input)="patchFilters({ filter: $any($event.target).value })"
+        />
+      </div>
+      <div class="col-md-3">
+        <select
+          class="form-select"
+          [value]="filters().status ?? ''"
+          (change)="patchFilters({ status: $any($event.target).value === '' ? null : +$any($event.target).value })"
+        >
+          <option value="">{{ '::GeoForge:ClientAdmin:Filter:AllStatuses' | abpLocalization }}</option>
+          <option [value]="0">{{ '::GeoForge:Client:Status:Active' | abpLocalization }}</option>
+          <option [value]="1">{{ '::GeoForge:Client:Status:Suspended' | abpLocalization }}</option>
+          <option [value]="2">{{ '::GeoForge:Client:Status:Revoked' | abpLocalization }}</option>
+        </select>
+      </div>
+      <div class="col-md-3">
+        <select
+          class="form-select"
+          [value]="filters().quotaType ?? ''"
+          (change)="patchFilters({ quotaType: $any($event.target).value === '' ? null : +$any($event.target).value })"
+        >
+          <option value="">{{ '::GeoForge:ClientAdmin:Filter:AllQuotas' | abpLocalization }}</option>
+          <option [value]="0">{{ '::GeoForge:Client:Quota:Unlimited' | abpLocalization }}</option>
+          <option [value]="1">{{ '::GeoForge:Client:Quota:Limited' | abpLocalization }}</option>
+        </select>
+      </div>
+      <div class="col-md-2">
+        <select
+          class="form-select"
+          [value]="filters().hasLayerAccess === null ? '' : (filters().hasLayerAccess ? 'yes' : 'no')"
+          (change)="patchFilters({ hasLayerAccess: $any($event.target).value === '' ? null : $any($event.target).value === 'yes' })"
+        >
+          <option value="">{{ '::GeoForge:ClientAdmin:Col:Layers' | abpLocalization }}</option>
+          <option value="yes">{{ '::GeoForge:ClientAdmin:Filter:HasLayers' | abpLocalization }}</option>
+          <option value="no">{{ '::GeoForge:ClientAdmin:Filter:NoLayers' | abpLocalization }}</option>
+        </select>
+      </div>
+    </div>
+    <div class="d-flex gap-3 mt-2">
+      <div class="form-check">
+        <input
+          class="form-check-input"
+          type="checkbox"
+          id="onlyExpired"
+          [checked]="filters().onlyExpired"
+          (change)="patchFilters({ onlyExpired: $any($event.target).checked })"
+        />
+        <label class="form-check-label small" for="onlyExpired">
+          {{ '::GeoForge:ClientAdmin:Filter:Expired' | abpLocalization }}
+        </label>
+      </div>
+      <div class="form-check">
+        <input
+          class="form-check-input"
+          type="checkbox"
+          id="onlyExhausted"
+          [checked]="filters().onlyQuotaExhausted"
+          (change)="patchFilters({ onlyQuotaExhausted: $any($event.target).checked })"
+        />
+        <label class="form-check-label small" for="onlyExhausted">
+          {{ '::GeoForge:ClientAdmin:Filter:Exhausted' | abpLocalization }}
+        </label>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Table -->
+<div class="card">
+  <div class="card-body">
+    <div *ngIf="loading()" class="text-center py-4">
+      <div class="spinner-border spinner-border-sm"></div>
+    </div>
+
+    <p class="text-muted text-center py-4 mb-0" *ngIf="!loading() && clients().length === 0">
+      {{ '::GeoForge:ClientAdmin:Empty' | abpLocalization }}
+    </p>
+
+    <div class="table-responsive" *ngIf="!loading() && clients().length">
+      <table class="table table-sm align-middle">
+        <thead>
+          <tr>
+            <th>{{ '::GeoForge:Common:Client' | abpLocalization }}</th>
+            <th>{{ '::GeoForge:Common:Status' | abpLocalization }}</th>
+            <th style="min-width: 180px">{{ '::GeoForge:ClientAdmin:Col:Usage' | abpLocalization }}</th>
+            <th class="text-end">{{ '::GeoForge:ClientAdmin:Col:Layers' | abpLocalization }}</th>
+            <th>{{ '::GeoForge:ClientAdmin:Col:LastUsed' | abpLocalization }}</th>
+            <th>{{ '::GeoForge:ClientAdmin:Col:Expires' | abpLocalization }}</th>
+            <th class="text-end">{{ '::GeoForge:Common:Actions' | abpLocalization }}</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr *ngFor="let c of clients()">
+            <td>
+              <a [routerLink]="['/geoforge/clients', c.id]" class="fw-semibold text-decoration-none">
+                {{ c.name }}
+              </a>
+              <div><code class="small">{{ c.clientId }}</code></div>
+            </td>
+            <td>
+              <span class="badge" [ngClass]="statusBadgeClass[c.effectiveStatus]">
+                {{ statusLabelKeys[c.effectiveStatus] | abpLocalization }}
+              </span>
+            </td>
+            <td>
+              <ng-container *ngIf="c.quotaType === ClientQuotaType.Limited; else unlimited">
+                <div class="small mb-1">
+                  {{ '::GeoForge:Client:Quota:UsedOfLimit' | abpLocalization: (c.usedRequests + '') : ((c.quotaLimit ?? 0) + '') }}
+                  <span class="text-danger ms-1" *ngIf="c.isQuotaExhausted">
+                    · {{ '::GeoForge:Client:Quota:Exhausted' | abpLocalization }}
+                  </span>
+                </div>
+                <div class="progress" style="height: 5px">
+                  <div class="progress-bar" [ngClass]="quotaBarClass(c)" [style.width.%]="quotaPercent(c)"></div>
+                </div>
+              </ng-container>
+              <ng-template #unlimited>
+                <span class="text-muted small">{{ '::GeoForge:Client:Quota:Unlimited' | abpLocalization }}</span>
+              </ng-template>
+            </td>
+            <td class="text-end">{{ c.grantedLayerCount }}</td>
+            <td class="text-muted small">
+              {{ c.lastUsedAt ? (c.lastUsedAt | date: 'short') : ('::GeoForge:Common:Never' | abpLocalization) }}
+            </td>
+            <td class="text-muted small">
+              {{ c.expiresAt ? (c.expiresAt | date: 'shortDate') : '—' }}
+            </td>
+            <td class="text-end text-nowrap">
+              <div ngbDropdown container="body" placement="bottom-end" class="d-inline-block">
+                <button class="btn btn-sm btn-outline-secondary" ngbDropdownToggle>⋯</button>
+                <div ngbDropdownMenu>
+                  <a ngbDropdownItem [routerLink]="['/geoforge/clients', c.id]">
+                    {{ '::GeoForge:ClientAdmin:Action:View' | abpLocalization }}
+                  </a>
+                  <button ngbDropdownItem (click)="copy(c.clientId)">
+                    {{ '::GeoForge:Common:CopyId' | abpLocalization }}
+                  </button>
+                  <div class="dropdown-divider"></div>
+                  <button ngbDropdownItem *ngIf="!isActive(c)" (click)="activate(c)"
+                          [disabled]="c.status === ApiClientStatus.Revoked">
+                    {{ '::GeoForge:ClientAdmin:Action:Activate' | abpLocalization }}
+                  </button>
+                  <button ngbDropdownItem *ngIf="c.status !== ApiClientStatus.Suspended && c.status !== ApiClientStatus.Revoked"
+                          (click)="suspend(c)">
+                    {{ '::GeoForge:ClientAdmin:Action:Suspend' | abpLocalization }}
+                  </button>
+                  <button ngbDropdownItem *ngIf="c.status !== ApiClientStatus.Revoked" (click)="revoke(c)">
+                    {{ '::GeoForge:ClientAdmin:Action:Revoke' | abpLocalization }}
+                  </button>
+                  <div class="dropdown-divider"></div>
+                  <button ngbDropdownItem (click)="rotateSecret(c)">
+                    {{ '::GeoForge:ClientAdmin:Action:RotateSecret' | abpLocalization }}
+                  </button>
+                  <button ngbDropdownItem *ngIf="c.quotaType === ClientQuotaType.Limited" (click)="resetQuota(c)">
+                    {{ '::GeoForge:ClientAdmin:Action:ResetQuota' | abpLocalization }}
+                  </button>
+                  <div class="dropdown-divider"></div>
+                  <button ngbDropdownItem class="text-danger" (click)="delete(c)">
+                    {{ '::GeoForge:ClientAdmin:Action:Delete' | abpLocalization }}
+                  </button>
+                </div>
+              </div>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Pagination -->
+    <div class="d-flex justify-content-between align-items-center" *ngIf="totalPages() > 1">
+      <small class="text-muted">{{ totalCount() }}</small>
+      <div class="btn-group btn-group-sm">
+        <button class="btn btn-outline-secondary" [disabled]="page() === 0" (click)="goToPage(page() - 1)">‹</button>
+        <button class="btn btn-outline-secondary" disabled>{{ page() + 1 }} / {{ totalPages() }}</button>
+        <button class="btn btn-outline-secondary" [disabled]="page() + 1 >= totalPages()" (click)="goToPage(page() + 1)">›</button>
+      </div>
+    </div>
+  </div>
+</div>

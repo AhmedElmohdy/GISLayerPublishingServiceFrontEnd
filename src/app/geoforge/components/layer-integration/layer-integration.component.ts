@@ -1,8 +1,26 @@
-import { Component, DestroyRef, Input, OnInit, computed, inject, signal } from '@angular/core';
+import {
+  Component,
+  DestroyRef,
+  Input,
+  OnInit,
+  computed,
+  inject,
+  signal,
+} from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { debounceTime, distinctUntilChanged, Subject, switchMap } from 'rxjs';
 import { Confirmation, ConfirmationService, ToasterService } from '@abp/ng.theme.shared';
+import { LocalizationService } from '@abp/ng.core';
 import { GeoForgeService } from '../../services/geoforge.service';
-import { ApiClient, GisLayer } from '../../models/geoforge.models';
+import {
+  AvailableClient,
+  ClientEnvironment,
+  ClientQuotaType,
+  CreateApiClient,
+  GisLayer,
+  LayerClient,
+} from '../../models/geoforge.models';
+import { STATUS_BADGE_CLASS, STATUS_LABEL_KEYS } from '../../models/client-display';
 
 /** One copyable snippet in the step-by-step guide. */
 interface Snippet {
@@ -12,13 +30,30 @@ interface Snippet {
   code: string;
 }
 
+/** The create-new form's local state. Mirrors the fields the create DTO accepts. */
+interface NewClientForm {
+  name: string;
+  description: string;
+  quotaType: ClientQuotaType;
+  quotaLimit: number | null;
+  expires: boolean;
+  expiresAt: string;
+  enabled: boolean;
+  allowedIpAddresses: string;
+  notes: string;
+}
+
 /**
  * "Integration Helper": everything an external system needs to consume this layer, on one page.
  *
+ * <p>The access-credentials card offers two ways to give a client access to the layer — grant an
+ * existing client, or create a new one — as a segmented control. "Choose existing" is a searchable
+ * list that marks already-granted and suspended clients as unselectable rather than hiding them,
+ * so the operator learns why the client they were looking for cannot be picked. Duplicate grants
+ * are refused by the server (HTTP 409) and surfaced as a clear message, never as a second row.</p>
+ *
  * <p>The snippets are generated from the layer's own endpoint URLs and from a real client id, so
- * an operator copies a command that works rather than a template they must fill in. When the
- * layer is public the guide says so and drops the token steps — telling an integrator to
- * authenticate against an endpoint that ignores authentication is how support tickets are made.</p>
+ * an operator copies a command that works rather than a template they must fill in.</p>
  */
 @Component({
   selector: 'app-layer-integration',
@@ -29,78 +64,224 @@ export class LayerIntegrationComponent implements OnInit {
   private readonly service = inject(GeoForgeService);
   private readonly toaster = inject(ToasterService);
   private readonly confirmation = inject(ConfirmationService);
+  private readonly localization = inject(LocalizationService);
   private readonly destroyRef = inject(DestroyRef);
 
   @Input({ required: true }) layer!: GisLayer;
 
-  readonly clients = signal<ApiClient[]>([]);
-  readonly loading = signal(true);
+  readonly ClientQuotaType = ClientQuotaType;
+  readonly statusBadgeClass = STATUS_BADGE_CLASS;
+  readonly statusLabelKeys = STATUS_LABEL_KEYS;
+
+  /** Which sub-form of the access card is showing. */
+  readonly mode = signal<'existing' | 'new'>('existing');
+
+  /** The clients that already read this layer. The grants table. */
+  readonly grantedClients = signal<LayerClient[]>([]);
+  readonly loadingGranted = signal(true);
   readonly busy = signal(false);
 
   /** The plaintext secret, held only until the operator dismisses it. Never re-fetchable. */
   readonly revealedSecret = signal<{ clientId: string; secret: string } | null>(null);
 
-  readonly newClientName = signal('');
-
   readonly tokenUrl = this.service.tokenUrl;
 
-  /** The client id used in the examples: a real one when it exists, a placeholder otherwise. */
-  readonly exampleClientId = computed(() => this.clients()[0]?.clientId ?? 'your-client-id');
+  // ---- Choose-existing state ----
+  readonly search = signal('');
+  readonly showSuspended = signal(false);
+  readonly availableClients = signal<AvailableClient[]>([]);
+  readonly loadingAvailable = signal(false);
+  readonly selectedClientId = signal<string | null>(null);
+  private readonly searchTrigger = new Subject<void>();
 
+  // ---- Create-new state ----
+  readonly form = signal<NewClientForm>(this.emptyForm());
+
+  readonly exampleClientId = computed(
+    () => this.grantedClients()[0]?.clientId ?? 'your-client-id',
+  );
   readonly featureServerUrl = computed(() => this.layer.endpoints?.esriFeatureServer ?? '');
-
   readonly steps = computed<Snippet[]>(() => this.buildSnippets());
 
   ngOnInit(): void {
-    this.load();
-  }
+    this.loadGranted();
 
-  private load(): void {
-    this.loading.set(true);
-
-    this.service
-      .getApiClients({ layerId: this.layer.id, maxResultCount: 50 })
-      .pipe(takeUntilDestroyed(this.destroyRef))
+    // The picker query is debounced and switch-mapped, so a fast typist never races two searches
+    // and never sees the earlier one's results overwrite the later one's.
+    this.searchTrigger
+      .pipe(
+        debounceTime(250),
+        switchMap(() => {
+          this.loadingAvailable.set(true);
+          return this.service.getAvailableClientsForLayer(this.layer.id, {
+            filter: this.search().trim() || undefined,
+            includeInactive: this.showSuspended(),
+            maxResultCount: 25,
+          });
+        }),
+        takeUntilDestroyed(this.destroyRef),
+      )
       .subscribe({
         next: result => {
-          this.clients.set(result.items);
-          this.loading.set(false);
+          this.availableClients.set(result.items);
+          this.loadingAvailable.set(false);
         },
-        error: () => this.loading.set(false),
+        error: () => this.loadingAvailable.set(false),
+      });
+
+    this.searchTrigger.next();
+  }
+
+  // ---- Mode + granted list -------------------------------------------------
+
+  setMode(mode: 'existing' | 'new'): void {
+    this.mode.set(mode);
+    if (mode === 'existing') {
+      this.searchTrigger.next();
+    }
+  }
+
+  private loadGranted(): void {
+    this.loadingGranted.set(true);
+    this.service
+      .getLayerClients(this.layer.id)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: clients => {
+          this.grantedClients.set(clients);
+          this.loadingGranted.set(false);
+        },
+        error: () => this.loadingGranted.set(false),
       });
   }
 
-  // ---- Credentials ---------------------------------------------------------
+  // ---- Choose existing -----------------------------------------------------
 
-  /** Creates a client already granted this layer, and reveals its secret once. */
-  createClient(): void {
-    const name = this.newClientName().trim();
-    if (!name) {
+  onSearchInput(value: string): void {
+    this.search.set(value);
+    this.searchTrigger.next();
+  }
+
+  toggleShowSuspended(): void {
+    this.showSuspended.update(v => !v);
+    this.searchTrigger.next();
+  }
+
+  select(client: AvailableClient): void {
+    if (!client.isSelectable) {
+      return;
+    }
+    this.selectedClientId.set(client.id === this.selectedClientId() ? null : client.id);
+  }
+
+  grantSelected(): void {
+    const clientId = this.selectedClientId();
+    if (!clientId) {
+      this.toaster.warn(this.t('::GeoForge:Integration:SelectClientFirst'));
       return;
     }
 
     this.busy.set(true);
     this.service
-      .createApiClient({ name, grantedLayerIds: [this.layer.id] })
+      .grantLayerAccess(clientId, { layerId: this.layer.id })
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: () => {
+          this.busy.set(false);
+          this.selectedClientId.set(null);
+          this.toaster.success(this.t('::GeoForge:Integration:GrantedToast'));
+          this.loadGranted();
+          this.searchTrigger.next();
+        },
+        error: err => {
+          this.busy.set(false);
+          // The server refuses a duplicate with 409; show the plain message rather than a raw error.
+          if (err?.status === 409) {
+            this.toaster.warn(this.t('::GeoForge:Integration:DuplicateToast'));
+            this.searchTrigger.next();
+          }
+        },
+      });
+  }
+
+  // ---- Create new ----------------------------------------------------------
+
+  private emptyForm(): NewClientForm {
+    return {
+      name: '',
+      description: '',
+      quotaType: ClientQuotaType.Unlimited,
+      quotaLimit: null,
+      expires: false,
+      expiresAt: '',
+      enabled: true,
+      allowedIpAddresses: '',
+      notes: '',
+    };
+  }
+
+  patchForm(patch: Partial<NewClientForm>): void {
+    this.form.update(f => ({ ...f, ...patch }));
+  }
+
+  readonly canCreate = computed(() => {
+    const f = this.form();
+    if (!f.name.trim()) {
+      return false;
+    }
+    if (f.quotaType === ClientQuotaType.Limited && (!f.quotaLimit || f.quotaLimit <= 0)) {
+      return false;
+    }
+    return true;
+  });
+
+  createClient(): void {
+    const f = this.form();
+    if (!this.canCreate() || this.busy()) {
+      return;
+    }
+
+    const input: CreateApiClient = {
+      name: f.name.trim(),
+      description: f.description.trim() || undefined,
+      quotaType: f.quotaType,
+      quotaLimit: f.quotaType === ClientQuotaType.Limited ? f.quotaLimit ?? undefined : undefined,
+      expiresAt: f.expires && f.expiresAt ? new Date(f.expiresAt).toISOString() : undefined,
+      isEnabled: f.enabled,
+      allowedIpAddresses: f.allowedIpAddresses.trim() || undefined,
+      notes: f.notes.trim() || undefined,
+      environment: ClientEnvironment.Unspecified,
+      // The whole point of creating here: the new client can read this layer immediately.
+      grantedLayerIds: [this.layer.id],
+    };
+
+    this.busy.set(true);
+    this.service
+      .createApiClient(input)
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
         next: result => {
           this.busy.set(false);
-          this.newClientName.set('');
+          this.form.set(this.emptyForm());
           this.revealedSecret.set({ clientId: result.client.clientId, secret: result.secret });
-          this.toaster.success(`Client '${result.client.clientId}' created.`);
-          this.load();
+          this.toaster.success(
+            this.t('::GeoForge:Client:CreatedToast', result.client.clientId),
+          );
+          this.mode.set('existing');
+          this.loadGranted();
+          this.searchTrigger.next();
         },
         error: () => this.busy.set(false),
       });
   }
 
-  rotateSecret(client: ApiClient): void {
+  // ---- Grants table actions ------------------------------------------------
+
+  revokeLayer(client: LayerClient): void {
     this.confirmation
       .warn(
-        `Every access token already issued to '${client.clientId}' will stop working immediately. ` +
-          'Any integration using it must fetch a new token with the new secret.',
-        'Rotate secret?',
+        this.t('::GeoForge:Layer:RemoveAccessConfirm', client.clientId),
+        this.t('::GeoForge:Layer:RemoveAccessTitle'),
       )
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe(status => {
@@ -109,64 +290,12 @@ export class LayerIntegrationComponent implements OnInit {
         }
 
         this.service
-          .rotateApiClientSecret(client.id)
-          .pipe(takeUntilDestroyed(this.destroyRef))
-          .subscribe(result => {
-            this.revealedSecret.set({ clientId: result.client.clientId, secret: result.secret });
-            this.toaster.info('Secret rotated.');
-            this.load();
-          });
-      });
-  }
-
-  /** Enabling and disabling is the reversible half of revoking access. */
-  toggleEnabled(client: ApiClient): void {
-    this.service
-      .updateApiClient(client.id, {
-        name: client.name,
-        description: client.description,
-        isEnabled: !client.isEnabled,
-        expiresAt: client.expiresAt,
-        grantedLayerIds: client.grantedLayers.map(l => l.layerId),
-      })
-      .pipe(takeUntilDestroyed(this.destroyRef))
-      .subscribe(updated => {
-        this.toaster.info(
-          updated.isEnabled
-            ? `Client '${updated.clientId}' enabled.`
-            : `Client '${updated.clientId}' disabled; its tokens no longer work.`,
-        );
-        this.load();
-      });
-  }
-
-  /** Revokes this layer only, leaving the client's other grants intact. */
-  revokeLayer(client: ApiClient): void {
-    this.confirmation
-      .warn(
-        `'${client.clientId}' will no longer be able to read '${this.layer.name}'.`,
-        'Revoke access to this layer?',
-      )
-      .pipe(takeUntilDestroyed(this.destroyRef))
-      .subscribe(status => {
-        if (status !== Confirmation.Status.confirm) {
-          return;
-        }
-
-        this.service
-          .updateApiClient(client.id, {
-            name: client.name,
-            description: client.description,
-            isEnabled: client.isEnabled,
-            expiresAt: client.expiresAt,
-            grantedLayerIds: client.grantedLayers
-              .map(l => l.layerId)
-              .filter(id => id !== this.layer.id),
-          })
+          .revokeLayerAccess(client.id, this.layer.id)
           .pipe(takeUntilDestroyed(this.destroyRef))
           .subscribe(() => {
-            this.toaster.success('Access revoked.');
-            this.load();
+            this.toaster.success(this.t('::GeoForge:Layer:AccessRemovedToast'));
+            this.loadGranted();
+            this.searchTrigger.next();
           });
       });
   }
@@ -176,19 +305,23 @@ export class LayerIntegrationComponent implements OnInit {
   }
 
   copy(text: string): void {
-    void navigator.clipboard.writeText(text).then(() => this.toaster.info('Copied.'));
+    void navigator.clipboard
+      .writeText(text)
+      .then(() => this.toaster.info(this.t('::GeoForge:Common:Copied')));
   }
 
-  // ---- Snippets ------------------------------------------------------------
+  private t(key: string, ...params: string[]): string {
+    return this.localization.instant({ key, defaultValue: key }, ...params);
+  }
+
+  // ---- Snippets (unchanged behaviour) --------------------------------------
 
   private buildSnippets(): Snippet[] {
     const featureServer = this.featureServerUrl();
-
     if (!featureServer) {
       return [];
     }
 
-    // A public layer ignores the token entirely. Showing the token dance for it would be a lie.
     if (this.layer.isPublic) {
       return [
         {
@@ -240,7 +373,6 @@ export class LayerIntegrationComponent implements OnInit {
     ];
   }
 
-  /** The language-specific examples, shared by the public and private variants. */
   private clientSnippets(featureServer: string, clientId: string | null): Snippet[] {
     const authHeader = clientId
       ? `,\n  headers: { Authorization: \`Bearer \${accessToken}\` }`
@@ -286,11 +418,7 @@ const layer = new FeatureLayer({ url: FEATURE_SERVER, outFields: ["*"] });`
 const layer = new FeatureLayer({ url: "${featureServer}", outFields: ["*"] });`;
 
     return [
-      {
-        title: 'JavaScript — fetch',
-        language: 'javascript',
-        code: fetchCode,
-      },
+      { title: 'JavaScript — fetch', language: 'javascript', code: fetchCode },
       {
         title: 'ArcGIS Maps SDK for JavaScript',
         language: 'javascript',
@@ -300,7 +428,6 @@ const layer = new FeatureLayer({ url: "${featureServer}", outFields: ["*"] });`;
     ];
   }
 
-  /** An illustrative expiry one hour out, formatted the way the API formats it. */
   private exampleExpiry(): string {
     return new Date(Date.now() + 3600 * 1000).toISOString().replace(/\.\d+Z$/, 'Z');
   }

@@ -370,11 +370,71 @@ export interface RemoteServiceMetadata {
 
 // ---- API clients (machine-to-machine access) -------------------------------
 
-/** A layer an API client may read. */
+/** Stored lifecycle state. `Expired` is derived, not stored — see `ApiClientEffectiveStatus`. */
+export enum ApiClientStatus {
+  Active = 0,
+  Suspended = 1,
+  Revoked = 2,
+}
+
+/** The status as a caller experiences it, with expiry folded in. What the UI renders. */
+export enum ApiClientEffectiveStatus {
+  Active = 0,
+  Suspended = 1,
+  Revoked = 2,
+  Expired = 3,
+}
+
+export enum ClientQuotaType {
+  Unlimited = 0,
+  Limited = 1,
+}
+
+export enum QuotaResetPolicy {
+  Never = 0,
+  Daily = 1,
+  Monthly = 2,
+  Custom = 3,
+}
+
+export enum ClientEnvironment {
+  Unspecified = 0,
+  Development = 1,
+  Staging = 2,
+  Production = 3,
+}
+
+/** Admin actions recorded in a client's audit log. Mirrors ClientAuditAction on the server. */
+export enum ClientAuditAction {
+  Created = 0,
+  Updated = 1,
+  Activated = 2,
+  Suspended = 3,
+  Revoked = 4,
+  SecretRotated = 5,
+  QuotaChanged = 6,
+  QuotaReset = 7,
+  LayerAccessGranted = 8,
+  LayerAccessRevoked = 9,
+  LayerAccessToggled = 10,
+  IpRestrictionsChanged = 11,
+  ExpirationChanged = 12,
+  RateLimitChanged = 13,
+  Deleted = 14,
+}
+
+/** A layer an API client may read, with its per-layer counters. */
 export interface ApiClientLayer {
   layerId: string;
   name: string;
   displayName: string;
+  layerStatus?: string;
+  isEnabled: boolean;
+  grantedAt: string;
+  grantedBy?: string;
+  quotaLimit?: number;
+  usedRequests: number;
+  lastAccessedAt?: string;
 }
 
 /** An API client as any read API returns it. The secret is never present here. */
@@ -383,10 +443,85 @@ export interface ApiClient {
   name: string;
   clientId: string;
   description?: string;
-  isEnabled: boolean;
+  status: ApiClientStatus;
+  effectiveStatus: ApiClientEffectiveStatus;
   expiresAt?: string;
   lastUsedAt?: string;
+  secretHint?: string;
+  lastSecretRotatedAt?: string;
+
+  quotaType: ClientQuotaType;
+  quotaLimit?: number;
+  usedRequests: number;
+  remainingRequests?: number;
+  quotaUsagePercent?: number;
+  isQuotaExhausted: boolean;
+  quotaResetPolicy: QuotaResetPolicy;
+  quotaResetPeriodDays?: number;
+  lastQuotaResetAt?: string;
+  nextQuotaResetAt?: string;
+
+  rateLimitPerMinute?: number;
+  rateLimitPerHour?: number;
+  allowedIpAddresses?: string;
+  notes?: string;
+  environment: ClientEnvironment;
+  tags?: string;
+  contactName?: string;
+  contactEmail?: string;
+
   grantedLayers: ApiClientLayer[];
+  grantedLayerCount: number;
+  creationTime: string;
+  creatorId?: string;
+  lastModificationTime?: string;
+  lastModifierId?: string;
+}
+
+/** A candidate row for the layer page's "choose an existing client" picker. */
+export interface AvailableClient {
+  id: string;
+  name: string;
+  clientId: string;
+  effectiveStatus: ApiClientEffectiveStatus;
+  quotaType: ClientQuotaType;
+  quotaLimit?: number;
+  usedRequests: number;
+  remainingRequests?: number;
+  grantedLayerCount: number;
+  isAlreadyGranted: boolean;
+  isSelectable: boolean;
+}
+
+/** A client that reads one layer, as the layer detail page's grants table shows it. */
+export interface LayerClient {
+  id: string;
+  name: string;
+  clientId: string;
+  effectiveStatus: ApiClientEffectiveStatus;
+  quotaType: ClientQuotaType;
+  quotaLimit?: number;
+  usedRequests: number;
+  remainingRequests?: number;
+  isAccessEnabled: boolean;
+  requestsToThisLayer: number;
+  lastAccessedAt?: string;
+  grantedAt: string;
+  grantedBy?: string;
+}
+
+export interface ClientAuditLog {
+  id: string;
+  apiClientId: string;
+  clientIdentifier: string;
+  action: ClientAuditAction;
+  layerId?: string;
+  layerName?: string;
+  oldValue?: string;
+  newValue?: string;
+  actorUserId?: string;
+  actorUserName?: string;
+  ipAddress?: string;
   creationTime: string;
 }
 
@@ -402,15 +537,46 @@ export interface CreateApiClient {
   secret?: string;
   description?: string;
   expiresAt?: string;
+  isEnabled?: boolean;
+  quotaType?: ClientQuotaType;
+  quotaLimit?: number;
+  quotaResetPolicy?: QuotaResetPolicy;
+  quotaResetPeriodDays?: number;
+  rateLimitPerMinute?: number;
+  rateLimitPerHour?: number;
+  allowedIpAddresses?: string;
+  notes?: string;
+  environment?: ClientEnvironment;
+  tags?: string;
+  contactName?: string;
+  contactEmail?: string;
   grantedLayerIds: string[];
 }
 
 export interface UpdateApiClient {
   name: string;
   description?: string;
-  isEnabled: boolean;
   expiresAt?: string;
-  grantedLayerIds: string[];
+  rateLimitPerMinute?: number;
+  rateLimitPerHour?: number;
+  allowedIpAddresses?: string;
+  notes?: string;
+  environment: ClientEnvironment;
+  tags?: string;
+  contactName?: string;
+  contactEmail?: string;
+}
+
+export interface UpdateQuota {
+  quotaType: ClientQuotaType;
+  quotaLimit?: number;
+  quotaResetPolicy?: QuotaResetPolicy;
+  quotaResetPeriodDays?: number;
+}
+
+export interface GrantLayerAccess {
+  layerId: string;
+  quotaLimit?: number;
 }
 
 /** The token endpoint's response. `accessToken` is opaque — the expiry is stated, not embedded. */

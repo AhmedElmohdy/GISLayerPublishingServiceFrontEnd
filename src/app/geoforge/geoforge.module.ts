@@ -1,6 +1,8 @@
 import { NgModule } from '@angular/core';
 import { SharedModule } from '../shared/shared.module';
 import { GeoForgeRoutingModule } from './geoforge-routing.module';
+import { ClientDetailComponent } from './components/clients/client-detail/client-detail.component';
+import { ClientListComponent } from './components/clients/client-list/client-list.component';
 import { DataSourceUploadComponent } from './components/data-source-upload/data-source-upload.component';
 import { LayerDetailComponent } from './components/layer-detail/layer-detail.component';
 import { LayerIntegrationComponent } from './components/layer-integration/layer-integration.component';
@@ -40,6 +42,10 @@ import { StatusBadgeComponent } from './components/monitoring/status-badge.compo
     LayerIntegrationComponent,
     LayerMapComponent,
     DataSourceUploadComponent,
+
+    // Client administration
+    ClientListComponent,
+    ClientDetailComponent,
 
     // Monitoring primitives
     KpiCardComponent,

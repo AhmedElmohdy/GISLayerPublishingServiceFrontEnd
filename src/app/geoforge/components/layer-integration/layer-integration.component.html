@@ -1,18 +1,19 @@
 <!-- The secret, shown once. Deliberately loud, and deliberately not dismissable by accident. -->
 <div class="alert alert-warning" *ngIf="revealedSecret() as revealed">
-  <h6 class="alert-heading">Copy this secret now</h6>
-  <p class="mb-2">
-    It is stored only as a hash. Closing this box is the last time you will see it — if it is
-    lost, rotate the secret to mint a new one.
-  </p>
+  <h6 class="alert-heading">{{ '::GeoForge:Client:Secret:CopyNow' | abpLocalization }}</h6>
+  <p class="mb-2">{{ '::GeoForge:Client:Secret:Explain' | abpLocalization }}</p>
   <div class="d-flex align-items-center gap-2 mb-2">
     <code class="flex-grow-1 p-2 bg-body-secondary rounded text-break">{{ revealed.secret }}</code>
-    <button class="btn btn-sm btn-outline-secondary" (click)="copy(revealed.secret)">Copy</button>
+    <button class="btn btn-sm btn-outline-secondary" (click)="copy(revealed.secret)">
+      {{ '::GeoForge:Common:CopyId' | abpLocalization }}
+    </button>
   </div>
   <div class="small">
-    Client id: <code>{{ revealed.clientId }}</code>
+    {{ '::GeoForge:Clients:ClientId' | abpLocalization }}: <code>{{ revealed.clientId }}</code>
   </div>
-  <button class="btn btn-sm btn-warning mt-2" (click)="dismissSecret()">I have copied it</button>
+  <button class="btn btn-sm btn-warning mt-2" (click)="dismissSecret()">
+    {{ '::GeoForge:Client:Secret:Copied' | abpLocalization }}
+  </button>
 </div>
 
 <div class="alert alert-secondary" *ngIf="!featureServerUrl()">
@@ -20,71 +21,289 @@
 </div>
 
 <ng-container *ngIf="featureServerUrl()">
-  <!-- ---- Access credentials ---- -->
+  <!-- ============ Access credentials ============ -->
   <div class="card mb-3">
     <div class="card-header">
-      <h6 class="card-title mb-0">Access credentials</h6>
+      <h6 class="card-title mb-0">{{ '::GeoForge:Integration:AccessCredentials' | abpLocalization }}</h6>
       <small class="text-muted">
         <ng-container *ngIf="layer.isPublic">
-          This layer is public, so no credential is required to read it. Credentials below still
-          apply if you make it private.
+          {{ '::GeoForge:Integration:PublicHint' | abpLocalization }}
         </ng-container>
         <ng-container *ngIf="!layer.isPublic">
-          A client can read only the layers it has been granted.
+          {{ '::GeoForge:Integration:AccessHint' | abpLocalization }}
         </ng-container>
       </small>
     </div>
 
     <div class="card-body">
-      <div class="d-flex gap-2 mb-3">
-        <input class="form-control" placeholder="New client name, e.g. Reporting Integration"
-               [value]="newClientName()"
-               (input)="newClientName.set($any($event.target).value)"
-               (keyup.enter)="createClient()" />
-        <button class="btn btn-primary text-nowrap"
-                [disabled]="!newClientName().trim() || busy()"
-                (click)="createClient()">
-          <span *ngIf="busy()" class="spinner-border spinner-border-sm me-2"></span>
-          Create client
+      <!-- Segmented control: choose existing vs create new -->
+      <div class="btn-group w-100 mb-3" role="group">
+        <button
+          type="button"
+          class="btn"
+          [class.btn-primary]="mode() === 'existing'"
+          [class.btn-outline-primary]="mode() !== 'existing'"
+          (click)="setMode('existing')"
+        >
+          {{ '::GeoForge:Integration:ChooseExisting' | abpLocalization }}
+        </button>
+        <button
+          type="button"
+          class="btn"
+          [class.btn-primary]="mode() === 'new'"
+          [class.btn-outline-primary]="mode() !== 'new'"
+          (click)="setMode('new')"
+        >
+          {{ '::GeoForge:Integration:CreateNew' | abpLocalization }}
         </button>
       </div>
 
-      <div *ngIf="loading()" class="text-center py-3">
+      <!-- ---- A. Choose existing ---- -->
+      <div *ngIf="mode() === 'existing'">
+        <div class="d-flex flex-wrap gap-2 align-items-center mb-2">
+          <input
+            class="form-control flex-grow-1"
+            style="min-width: 220px"
+            [placeholder]="'::GeoForge:Integration:SearchClients' | abpLocalization"
+            [value]="search()"
+            (input)="onSearchInput($any($event.target).value)"
+          />
+          <div class="form-check mb-0">
+            <input
+              class="form-check-input"
+              type="checkbox"
+              id="showSuspended"
+              [checked]="showSuspended()"
+              (change)="toggleShowSuspended()"
+            />
+            <label class="form-check-label small" for="showSuspended">
+              {{ '::GeoForge:Integration:ShowSuspended' | abpLocalization }}
+            </label>
+          </div>
+        </div>
+
+        <div *ngIf="loadingAvailable()" class="text-center py-3">
+          <div class="spinner-border spinner-border-sm"></div>
+        </div>
+
+        <p class="text-muted small mb-2" *ngIf="!loadingAvailable() && availableClients().length === 0">
+          {{ '::GeoForge:Integration:NoSelectableClients' | abpLocalization }}
+        </p>
+
+        <div class="list-group mb-3" *ngIf="!loadingAvailable() && availableClients().length">
+          <button
+            type="button"
+            class="list-group-item list-group-item-action d-flex justify-content-between align-items-center"
+            *ngFor="let c of availableClients()"
+            [class.active]="c.id === selectedClientId()"
+            [class.disabled]="!c.isSelectable"
+            [attr.aria-disabled]="!c.isSelectable"
+            (click)="select(c)"
+          >
+            <span class="text-truncate">
+              <span class="fw-semibold">{{ c.name }}</span>
+              <code class="ms-2 small">{{ c.clientId }}</code>
+              <span class="text-muted small ms-2">
+                · {{ '::GeoForge:Integration:AssignedLayers' | abpLocalization: (c.grantedLayerCount + '') }}
+              </span>
+              <span class="text-muted small ms-2" *ngIf="c.quotaType === ClientQuotaType.Limited">
+                · {{ '::GeoForge:Client:Quota:Remaining' | abpLocalization: ((c.remainingRequests ?? 0) + '') }}
+              </span>
+              <span class="text-muted small ms-2" *ngIf="c.quotaType !== ClientQuotaType.Limited">
+                · {{ '::GeoForge:Client:Quota:Unlimited' | abpLocalization }}
+              </span>
+            </span>
+            <span class="text-nowrap">
+              <span class="badge" [ngClass]="statusBadgeClass[c.effectiveStatus]">
+                {{ statusLabelKeys[c.effectiveStatus] | abpLocalization }}
+              </span>
+              <span class="badge bg-secondary ms-1" *ngIf="c.isAlreadyGranted">
+                {{ '::GeoForge:Integration:AlreadyGranted' | abpLocalization }}
+              </span>
+            </span>
+          </button>
+        </div>
+
+        <button
+          class="btn btn-primary"
+          [disabled]="!selectedClientId() || busy()"
+          (click)="grantSelected()"
+        >
+          <span *ngIf="busy()" class="spinner-border spinner-border-sm me-2"></span>
+          {{ '::GeoForge:Integration:GrantAccess' | abpLocalization }}
+        </button>
+      </div>
+
+      <!-- ---- B. Create new ---- -->
+      <div *ngIf="mode() === 'new'">
+        <div class="row g-2">
+          <div class="col-md-6">
+            <label class="form-label small mb-1">{{ '::GeoForge:Client:Field:Name' | abpLocalization }}</label>
+            <input
+              class="form-control"
+              [placeholder]="'::GeoForge:Client:Field:NamePlaceholder' | abpLocalization"
+              [value]="form().name"
+              (input)="patchForm({ name: $any($event.target).value })"
+            />
+          </div>
+          <div class="col-md-6">
+            <label class="form-label small mb-1">{{ '::GeoForge:Client:Field:Description' | abpLocalization }}</label>
+            <input
+              class="form-control"
+              [value]="form().description"
+              (input)="patchForm({ description: $any($event.target).value })"
+            />
+          </div>
+
+          <div class="col-md-6">
+            <label class="form-label small mb-1">{{ '::GeoForge:Client:Field:QuotaType' | abpLocalization }}</label>
+            <select
+              class="form-select"
+              [value]="form().quotaType"
+              (change)="patchForm({ quotaType: +$any($event.target).value })"
+            >
+              <option [value]="0">{{ '::GeoForge:Client:Quota:Unlimited' | abpLocalization }}</option>
+              <option [value]="1">{{ '::GeoForge:Client:Quota:Limited' | abpLocalization }}</option>
+            </select>
+          </div>
+          <div class="col-md-6" *ngIf="form().quotaType === ClientQuotaType.Limited">
+            <label class="form-label small mb-1">{{ '::GeoForge:Client:Field:QuotaLimit' | abpLocalization }}</label>
+            <input
+              type="number"
+              min="1"
+              class="form-control"
+              [value]="form().quotaLimit"
+              (input)="patchForm({ quotaLimit: +$any($event.target).value })"
+            />
+          </div>
+
+          <div class="col-md-6">
+            <label class="form-label small mb-1">{{ '::GeoForge:Client:Field:Expiration' | abpLocalization }}</label>
+            <div class="form-check">
+              <input
+                class="form-check-input"
+                type="checkbox"
+                id="expires"
+                [checked]="form().expires"
+                (change)="patchForm({ expires: $any($event.target).checked })"
+              />
+              <label class="form-check-label small" for="expires">
+                {{ form().expires ? ('::GeoForge:Client:Field:ExpiresOn' | abpLocalization) : ('::GeoForge:Client:Field:NeverExpires' | abpLocalization) }}
+              </label>
+            </div>
+            <input
+              *ngIf="form().expires"
+              type="datetime-local"
+              class="form-control mt-1"
+              [value]="form().expiresAt"
+              (input)="patchForm({ expiresAt: $any($event.target).value })"
+            />
+          </div>
+          <div class="col-md-6 d-flex align-items-end">
+            <div class="form-check">
+              <input
+                class="form-check-input"
+                type="checkbox"
+                id="enabled"
+                [checked]="form().enabled"
+                (change)="patchForm({ enabled: $any($event.target).checked })"
+              />
+              <label class="form-check-label small" for="enabled">
+                {{ '::GeoForge:Client:Field:Enabled' | abpLocalization }}
+              </label>
+            </div>
+          </div>
+
+          <div class="col-md-6">
+            <label class="form-label small mb-1">{{ '::GeoForge:Client:Field:IpAllowlist' | abpLocalization }}</label>
+            <input
+              class="form-control"
+              [placeholder]="'::GeoForge:Client:Field:IpAllowlistPlaceholder' | abpLocalization"
+              [value]="form().allowedIpAddresses"
+              (input)="patchForm({ allowedIpAddresses: $any($event.target).value })"
+            />
+          </div>
+          <div class="col-md-6">
+            <label class="form-label small mb-1">{{ '::GeoForge:Client:Field:Notes' | abpLocalization }}</label>
+            <input
+              class="form-control"
+              [value]="form().notes"
+              (input)="patchForm({ notes: $any($event.target).value })"
+            />
+          </div>
+        </div>
+
+        <button
+          class="btn btn-primary mt-3"
+          [disabled]="!canCreate() || busy()"
+          (click)="createClient()"
+        >
+          <span *ngIf="busy()" class="spinner-border spinner-border-sm me-2"></span>
+          {{ '::GeoForge:Client:Create' | abpLocalization }}
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ Clients with access ============ -->
+  <div class="card mb-3">
+    <div class="card-header">
+      <h6 class="card-title mb-0">{{ '::GeoForge:Layer:ClientsTitle' | abpLocalization }}</h6>
+    </div>
+    <div class="card-body">
+      <div *ngIf="loadingGranted()" class="text-center py-3">
         <div class="spinner-border spinner-border-sm"></div>
       </div>
 
-      <p class="text-muted mb-0" *ngIf="!loading() && clients().length === 0">
-        No client can read this layer yet.
+      <p class="text-muted mb-0" *ngIf="!loadingGranted() && grantedClients().length === 0">
+        {{ '::GeoForge:Layer:NoClients' | abpLocalization }}
       </p>
 
-      <div class="table-responsive" *ngIf="!loading() && clients().length">
+      <div class="table-responsive" *ngIf="!loadingGranted() && grantedClients().length">
         <table class="table table-sm align-middle mb-0">
           <thead>
             <tr>
-              <th>Client id</th>
-              <th>Name</th>
-              <th>Status</th>
-              <th>Last used</th>
-              <th class="text-end">Actions</th>
+              <th>{{ '::GeoForge:Common:Client' | abpLocalization }}</th>
+              <th>{{ '::GeoForge:Common:Status' | abpLocalization }}</th>
+              <th>{{ '::GeoForge:Common:Quota' | abpLocalization }}</th>
+              <th class="text-end">{{ '::GeoForge:Layer:Col:RequestsHere' | abpLocalization }}</th>
+              <th>{{ '::GeoForge:Common:LastAccessed' | abpLocalization }}</th>
+              <th class="text-end">{{ '::GeoForge:Common:Actions' | abpLocalization }}</th>
             </tr>
           </thead>
           <tbody>
-            <tr *ngFor="let c of clients()">
-              <td><code>{{ c.clientId }}</code></td>
-              <td>{{ c.name }}</td>
+            <tr *ngFor="let c of grantedClients()">
               <td>
-                <span class="badge" [class.bg-success]="c.isEnabled" [class.bg-secondary]="!c.isEnabled">
-                  {{ c.isEnabled ? 'Enabled' : 'Disabled' }}
+                <div class="fw-semibold">{{ c.name }}</div>
+                <code class="small">{{ c.clientId }}</code>
+              </td>
+              <td>
+                <span class="badge" [ngClass]="statusBadgeClass[c.effectiveStatus]">
+                  {{ statusLabelKeys[c.effectiveStatus] | abpLocalization }}
                 </span>
               </td>
-              <td class="text-muted small">{{ c.lastUsedAt ? (c.lastUsedAt | date: 'short') : 'never' }}</td>
+              <td class="small">
+                <ng-container *ngIf="c.quotaType === ClientQuotaType.Limited">
+                  {{ '::GeoForge:Client:Quota:UsedOfLimit' | abpLocalization: (c.usedRequests + '') : ((c.quotaLimit ?? 0) + '') }}
+                </ng-container>
+                <ng-container *ngIf="c.quotaType !== ClientQuotaType.Limited">
+                  {{ '::GeoForge:Client:Quota:Unlimited' | abpLocalization }}
+                </ng-container>
+              </td>
+              <td class="text-end">{{ c.requestsToThisLayer }}</td>
+              <td class="text-muted small">
+                {{ c.lastAccessedAt ? (c.lastAccessedAt | date: 'short') : ('::GeoForge:Common:Never' | abpLocalization) }}
+              </td>
               <td class="text-end text-nowrap">
-                <button class="btn btn-sm btn-outline-secondary me-1" (click)="copy(c.clientId)">Copy id</button>
-                <button class="btn btn-sm btn-outline-warning me-1" (click)="rotateSecret(c)">Rotate secret</button>
-                <button class="btn btn-sm btn-outline-secondary me-1" (click)="toggleEnabled(c)">
-                  {{ c.isEnabled ? 'Disable' : 'Enable' }}
+                <button class="btn btn-sm btn-outline-secondary me-1" (click)="copy(c.clientId)">
+                  {{ '::GeoForge:Common:CopyId' | abpLocalization }}
                 </button>
-                <button class="btn btn-sm btn-outline-danger" (click)="revokeLayer(c)">Revoke</button>
+                <a class="btn btn-sm btn-outline-secondary me-1" [routerLink]="['/geoforge/clients', c.id]">
+                  {{ '::GeoForge:Common:ViewClient' | abpLocalization }}
+                </a>
+                <button class="btn btn-sm btn-outline-danger" (click)="revokeLayer(c)">
+                  {{ '::GeoForge:Common:RemoveAccess' | abpLocalization }}
+                </button>
               </td>
             </tr>
           </tbody>
@@ -93,7 +312,7 @@
     </div>
   </div>
 
-  <!-- ---- Step-by-step guide ---- -->
+  <!-- ============ Integration guide ============ -->
   <div class="card">
     <div class="card-header d-flex justify-content-between align-items-center">
       <div>
@@ -114,10 +333,9 @@
             <div class="text-muted small mb-2" *ngIf="step.note">{{ step.note }}</div>
           </div>
           <button class="btn btn-sm btn-outline-secondary text-nowrap ms-2" (click)="copy(step.code)">
-            Copy
+            {{ '::GeoForge:Common:CopyId' | abpLocalization }}
           </button>
         </div>
-
         <pre class="bg-body-secondary rounded p-3 mb-0" style="overflow-x: auto"><code>{{ step.code }}</code></pre>
       </div>
     </div>
