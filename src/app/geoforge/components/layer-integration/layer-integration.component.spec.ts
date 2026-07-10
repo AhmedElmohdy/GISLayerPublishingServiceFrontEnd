@@ -5,6 +5,7 @@ import { ConfirmationService, ToasterService } from '@abp/ng.theme.shared';
 import { LocalizationService } from '@abp/ng.core';
 import { LayerIntegrationComponent } from './layer-integration.component';
 import { GeoForgeService } from '../../services/geoforge.service';
+import { EmailTemplateStateService } from '../../services/email-template-state.service';
 import {
   ApiClientEffectiveStatus,
   AvailableClient,
@@ -78,6 +79,11 @@ describe('LayerIntegrationComponent', () => {
       typeof key === 'string' ? key : (key as { key: string }).key,
     );
 
+    const templateState = {
+      enabledMap: () => of({} as Record<string, boolean>),
+      isEnabled: () => true,
+    };
+
     await TestBed.configureTestingModule({
       declarations: [LayerIntegrationComponent, MockLocalizationPipe],
       providers: [
@@ -85,6 +91,7 @@ describe('LayerIntegrationComponent', () => {
         { provide: ToasterService, useValue: toaster },
         { provide: ConfirmationService, useValue: confirmation },
         { provide: LocalizationService, useValue: localization },
+        { provide: EmailTemplateStateService, useValue: templateState },
       ],
       schemas: [NO_ERRORS_SCHEMA],
     }).compileComponents();
@@ -154,6 +161,8 @@ describe('LayerIntegrationComponent', () => {
   it('blocks creating until a name is present, and requires a limit for a limited quota', fakeAsync(() => {
     init();
     component.setMode('new');
+    // Uncheck the send-credentials box so this test isolates the name/quota rules.
+    component.patchForm({ sendCredentials: false });
     expect(component.canCreate()).toBeFalse();
 
     component.patchForm({ name: 'New client' });
@@ -166,19 +175,47 @@ describe('LayerIntegrationComponent', () => {
     expect(component.canCreate()).toBeTrue();
   }));
 
-  it('creates a client already granted this layer and reveals its secret once', fakeAsync(() => {
+  it('requires a contact email when the send-credentials box is checked', fakeAsync(() => {
+    init();
+    component.setMode('new');
+    component.patchForm({ name: 'New client' });
+
+    // sendCredentials defaults to true, so a valid contact email is required.
+    expect(component.willSendCredentials()).toBeTrue();
+    expect(component.canCreate()).toBeFalse();
+
+    component.patchForm({ contactEmail: 'ops@acme.example' });
+    expect(component.canCreate()).toBeTrue();
+  }));
+
+  it('disables and ignores sending when the creation template is globally disabled', fakeAsync(() => {
+    init();
+    component.setMode('new');
+    // Simulate the template being off: no contact email is then required.
+    component.sendCredentialsTemplateEnabled.set(false);
+    component.patchForm({ name: 'New client' });
+
+    expect(component.willSendCredentials()).toBeFalse();
+    expect(component.canCreate()).toBeTrue();
+  }));
+
+  it('creates a client already granted this layer, sends the flag explicitly, and reveals its secret once', fakeAsync(() => {
     init();
     service.createApiClient.and.returnValue(
       of({ client: { clientId: 'new-client' }, secret: 'S3CR3T' } as never),
     );
 
     component.setMode('new');
-    component.patchForm({ name: 'New client' });
+    component.patchForm({ name: 'New client', contactEmail: 'ops@acme.example' });
     component.createClient();
     tick();
 
     const arg = service.createApiClient.calls.mostRecent().args[0];
     expect(arg.grantedLayerIds).toEqual(['layer-1']);
+    expect(arg.contactEmail).toBe('ops@acme.example');
+    expect(arg.sendNotificationEmail).toBeTrue();
     expect(component.revealedSecret()).toEqual({ clientId: 'new-client', secret: 'S3CR3T' });
+    // The operator is told the credentials email was queued, without the flow being treated as failed.
+    expect(toaster.info).toHaveBeenCalled();
   }));
 });

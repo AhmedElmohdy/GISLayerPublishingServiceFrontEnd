@@ -4,11 +4,15 @@ import { debounceTime, Subject, switchMap } from 'rxjs';
 import { Confirmation, ConfirmationService, ToasterService } from '@abp/ng.theme.shared';
 import { LocalizationService } from '@abp/ng.core';
 import { GeoForgeService } from '../../../services/geoforge.service';
+import { EmailTemplateStateService } from '../../../services/email-template-state.service';
 import {
   ApiClient,
   ApiClientEffectiveStatus,
   ApiClientStatus,
+  CLIENT_ID_CREATED_TEMPLATE_KEY,
+  ClientEnvironment,
   ClientQuotaType,
+  CreateApiClient,
 } from '../../../models/geoforge.models';
 import {
   isActive,
@@ -18,6 +22,8 @@ import {
   STATUS_LABEL_KEYS,
 } from '../../../models/client-display';
 
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
 /** The list page's server-side query, mirroring GetApiClientsInput. */
 interface ClientFilters {
   filter: string;
@@ -26,6 +32,22 @@ interface ClientFilters {
   onlyExpired: boolean;
   onlyQuotaExhausted: boolean;
   hasLayerAccess: boolean | null;
+}
+
+/** The "new client" panel's local state. Mirrors the fields the create DTO accepts. */
+interface NewClientForm {
+  name: string;
+  description: string;
+  quotaType: ClientQuotaType;
+  quotaLimit: number | null;
+  expires: boolean;
+  expiresAt: string;
+  enabled: boolean;
+  allowedIpAddresses: string;
+  notes: string;
+  contactName: string;
+  contactEmail: string;
+  sendCredentials: boolean;
 }
 
 /**
@@ -43,6 +65,7 @@ interface ClientFilters {
 })
 export class ClientListComponent implements OnInit {
   private readonly service = inject(GeoForgeService);
+  private readonly templateState = inject(EmailTemplateStateService);
   private readonly toaster = inject(ToasterService);
   private readonly confirmation = inject(ConfirmationService);
   private readonly localization = inject(LocalizationService);
@@ -76,10 +99,52 @@ export class ClientListComponent implements OnInit {
 
   private readonly reload = new Subject<void>();
 
-  /** The secret from a rotate, shown once. */
+  /** The secret from a rotate or a create, shown once. */
   readonly revealedSecret = signal<{ clientId: string; secret: string } | null>(null);
 
+  // ---- New-client panel ----------------------------------------------------
+
+  /** Whether the inline create panel is open. */
+  readonly showCreate = signal(false);
+  readonly creating = signal(false);
+  readonly form = signal<NewClientForm>(this.emptyForm());
+
+  /** Whether the ClientIdCreated template is globally enabled — gates the send-credentials checkbox. */
+  readonly sendCredentialsTemplateEnabled = signal(true);
+
+  readonly contactEmailValid = computed(() => EMAIL_PATTERN.test(this.form().contactEmail.trim()));
+
+  /** Effective: only send when the operator asked and the template is globally enabled. */
+  readonly willSendCredentials = computed(
+    () => this.form().sendCredentials && this.sendCredentialsTemplateEnabled(),
+  );
+
+  readonly canCreate = computed(() => {
+    const f = this.form();
+    if (!f.name.trim()) {
+      return false;
+    }
+    if (f.quotaType === ClientQuotaType.Limited && (!f.quotaLimit || f.quotaLimit <= 0)) {
+      return false;
+    }
+    if (this.willSendCredentials() && !this.contactEmailValid()) {
+      return false;
+    }
+    return true;
+  });
+
   ngOnInit(): void {
+    // Learn whether the creation template is enabled, to gate the send-credentials checkbox. On
+    // no-permission or error the map is empty and the checkbox stays enabled (backend authoritative).
+    this.templateState
+      .enabledMap()
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe(map =>
+        this.sendCredentialsTemplateEnabled.set(
+          this.templateState.isEnabled(map, CLIENT_ID_CREATED_TEMPLATE_KEY),
+        ),
+      );
+
     this.reload
       .pipe(
         debounceTime(200),
@@ -123,6 +188,87 @@ export class ClientListComponent implements OnInit {
     }
     this.page.set(page);
     this.reload.next();
+  }
+
+  // ---- New-client panel ----------------------------------------------------
+
+  private emptyForm(): NewClientForm {
+    return {
+      name: '',
+      description: '',
+      quotaType: ClientQuotaType.Unlimited,
+      quotaLimit: null,
+      expires: false,
+      expiresAt: '',
+      enabled: true,
+      allowedIpAddresses: '',
+      notes: '',
+      contactName: '',
+      contactEmail: '',
+      // Off by default: the common path here is "just create a credential", so the panel opens ready to
+      // submit with only a name. Ticking this reveals the contact-email requirement and its gating.
+      sendCredentials: false,
+    };
+  }
+
+  toggleCreate(): void {
+    this.showCreate.update(v => !v);
+    if (this.showCreate()) {
+      this.form.set(this.emptyForm());
+    }
+  }
+
+  patchForm(patch: Partial<NewClientForm>): void {
+    this.form.update(f => ({ ...f, ...patch }));
+  }
+
+  createClient(): void {
+    const f = this.form();
+    if (!this.canCreate() || this.creating()) {
+      return;
+    }
+
+    const willSend = this.willSendCredentials();
+    const contactEmail = f.contactEmail.trim() || undefined;
+
+    const input: CreateApiClient = {
+      name: f.name.trim(),
+      description: f.description.trim() || undefined,
+      quotaType: f.quotaType,
+      quotaLimit: f.quotaType === ClientQuotaType.Limited ? f.quotaLimit ?? undefined : undefined,
+      expiresAt: f.expires && f.expiresAt ? new Date(f.expiresAt).toISOString() : undefined,
+      isEnabled: f.enabled,
+      allowedIpAddresses: f.allowedIpAddresses.trim() || undefined,
+      notes: f.notes.trim() || undefined,
+      environment: ClientEnvironment.Unspecified,
+      contactName: f.contactName.trim() || undefined,
+      contactEmail,
+      // Sent explicitly, gated by the template being enabled.
+      sendNotificationEmail: willSend,
+      // No layer is granted from the admin list; access is assigned later from the client or layer page.
+      grantedLayerIds: [],
+    };
+
+    this.creating.set(true);
+    this.service
+      .createApiClient(input)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: result => {
+          this.creating.set(false);
+          this.showCreate.set(false);
+          this.form.set(this.emptyForm());
+          // The one-time secret is always shown — the email is a convenience, never the only copy.
+          this.revealedSecret.set({ clientId: result.client.clientId, secret: result.secret });
+          this.toaster.success(this.t('::GeoForge:Client:CreatedToast', result.client.clientId));
+          if (willSend && contactEmail) {
+            this.toaster.info(this.t('::GeoForge:Client:CredentialsEmailQueued', contactEmail));
+          }
+          this.page.set(0);
+          this.reload.next();
+        },
+        error: () => this.creating.set(false),
+      });
   }
 
   // ---- Row actions ---------------------------------------------------------

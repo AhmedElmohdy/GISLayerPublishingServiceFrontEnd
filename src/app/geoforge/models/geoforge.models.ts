@@ -470,6 +470,13 @@ export interface ApiClient {
   contactName?: string;
   contactEmail?: string;
 
+  notificationEmail?: string;
+  notificationContactName?: string;
+  notifyOnPermissionChange?: boolean;
+  notifyOnLayerAccessChange?: boolean;
+  notifyOnStatusChange?: boolean;
+  notifyOnQuotaChange?: boolean;
+
   grantedLayers: ApiClientLayer[];
   grantedLayerCount: number;
   creationTime: string;
@@ -531,6 +538,16 @@ export interface ApiClientSecret {
   secret: string;
 }
 
+/** An API client as any read API returns it, plus the notification-preference fields. */
+export interface ApiClientNotificationPrefs {
+  notificationEmail?: string;
+  notificationContactName?: string;
+  notifyOnPermissionChange: boolean;
+  notifyOnLayerAccessChange: boolean;
+  notifyOnStatusChange: boolean;
+  notifyOnQuotaChange: boolean;
+}
+
 export interface CreateApiClient {
   name: string;
   clientId?: string;
@@ -550,6 +567,8 @@ export interface CreateApiClient {
   tags?: string;
   contactName?: string;
   contactEmail?: string;
+  /** The create form's "Send client credentials by email" checkbox. Sent explicitly. */
+  sendNotificationEmail?: boolean;
   grantedLayerIds: string[];
 }
 
@@ -565,6 +584,15 @@ export interface UpdateApiClient {
   tags?: string;
   contactName?: string;
   contactEmail?: string;
+  // ---- Notification preferences ----
+  notificationEmail?: string;
+  notificationContactName?: string;
+  notifyOnPermissionChange?: boolean;
+  notifyOnLayerAccessChange?: boolean;
+  notifyOnStatusChange?: boolean;
+  notifyOnQuotaChange?: boolean;
+  /** Operation-level switch: send the permissions-changed email when access settings change. */
+  sendEmailNotification?: boolean;
 }
 
 export interface UpdateQuota {
@@ -572,12 +600,91 @@ export interface UpdateQuota {
   quotaLimit?: number;
   quotaResetPolicy?: QuotaResetPolicy;
   quotaResetPeriodDays?: number;
+  /** Operation-level switch: send the quota-changed email. */
+  sendEmailNotification?: boolean;
 }
 
 export interface GrantLayerAccess {
   layerId: string;
   quotaLimit?: number;
+  /** Operation-level switch: send the layer-access-granted email. */
+  sendEmailNotification?: boolean;
 }
+
+// ---- Email notifications ----------------------------------------------------
+
+/** The outgoing-email account as the settings screen reads it. Never carries the password. */
+export interface EmailSettings {
+  displayName?: string;
+  senderEmail?: string;
+  smtpUsername?: string;
+  /** True when a password is stored. The password itself is never returned. */
+  hasPassword: boolean;
+  smtpHost?: string;
+  smtpPort: number;
+  enableSsl: boolean;
+  useDefaultCredentials: boolean;
+  authenticationEnabled: boolean;
+  connectionTimeout: number;
+  portalUrl?: string;
+  supportEmail?: string;
+}
+
+/** Changes to the outgoing-email account. A null/empty password keeps the stored one. */
+export interface UpdateEmailSettings {
+  displayName?: string;
+  senderEmail?: string;
+  smtpUsername?: string;
+  password?: string;
+  smtpHost?: string;
+  smtpPort: number;
+  enableSsl: boolean;
+  useDefaultCredentials: boolean;
+  authenticationEnabled: boolean;
+  connectionTimeout: number;
+  portalUrl?: string;
+  supportEmail?: string;
+}
+
+export interface SendTestEmail {
+  recipientEmail: string;
+  settings: UpdateEmailSettings;
+}
+
+/** One predefined notification template as the editor reads it. */
+export interface EmailTemplate {
+  id: string;
+  templateKey: string;
+  displayName: string;
+  description?: string;
+  subject: string;
+  body: string;
+  isEnabled: boolean;
+  isHtml: boolean;
+  lastModificationTime?: string;
+  lastModifierId?: string;
+  creationTime: string;
+  concurrencyStamp?: string;
+  availablePlaceholders: string[];
+}
+
+export interface UpdateEmailTemplate {
+  subject: string;
+  body: string;
+  isEnabled: boolean;
+  isHtml: boolean;
+  concurrencyStamp?: string;
+}
+
+export interface SendTemplatePreview {
+  recipientEmail: string;
+  subject?: string;
+  body?: string;
+  isHtml?: boolean;
+}
+
+/** The template key that carries the one-time secret in the creation email. */
+export const CLIENT_ID_CREATED_TEMPLATE_KEY = 'ClientIdCreated';
 
 /** The token endpoint's response. `accessToken` is opaque — the expiry is stated, not embedded. */
 export interface TokenResponse {

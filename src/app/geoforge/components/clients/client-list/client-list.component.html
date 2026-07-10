@@ -21,6 +21,170 @@
     <h4 class="mb-0">{{ '::GeoForge:ClientAdmin:Title' | abpLocalization }}</h4>
     <small class="text-muted">{{ '::GeoForge:ClientAdmin:Subtitle' | abpLocalization }}</small>
   </div>
+  <button class="btn btn-primary" (click)="toggleCreate()">
+    <i class="fa fa-plus me-1"></i>
+    {{ '::GeoForge:ClientAdmin:NewClient' | abpLocalization }}
+  </button>
+</div>
+
+<!-- New-client panel -->
+<div class="card mb-3 border-primary" *ngIf="showCreate()">
+  <div class="card-header d-flex justify-content-between align-items-center">
+    <h6 class="card-title mb-0">{{ '::GeoForge:ClientAdmin:NewClient' | abpLocalization }}</h6>
+    <button type="button" class="btn-close" [attr.aria-label]="'::GeoForge:Common:Cancel' | abpLocalization" (click)="toggleCreate()"></button>
+  </div>
+  <div class="card-body">
+    <div class="row g-2">
+      <div class="col-md-6">
+        <label class="form-label small mb-1">{{ '::GeoForge:Client:Field:Name' | abpLocalization }}</label>
+        <input
+          class="form-control"
+          [placeholder]="'::GeoForge:Client:Field:NamePlaceholder' | abpLocalization"
+          [value]="form().name"
+          (input)="patchForm({ name: $any($event.target).value })"
+        />
+      </div>
+      <div class="col-md-6">
+        <label class="form-label small mb-1">{{ '::GeoForge:Client:Field:Description' | abpLocalization }}</label>
+        <input
+          class="form-control"
+          [value]="form().description"
+          (input)="patchForm({ description: $any($event.target).value })"
+        />
+      </div>
+
+      <div class="col-md-6">
+        <label class="form-label small mb-1">{{ '::GeoForge:Client:Field:QuotaType' | abpLocalization }}</label>
+        <select
+          class="form-select"
+          [value]="form().quotaType"
+          (change)="patchForm({ quotaType: +$any($event.target).value })"
+        >
+          <option [value]="0">{{ '::GeoForge:Client:Quota:Unlimited' | abpLocalization }}</option>
+          <option [value]="1">{{ '::GeoForge:Client:Quota:Limited' | abpLocalization }}</option>
+        </select>
+      </div>
+      <div class="col-md-6" *ngIf="form().quotaType === ClientQuotaType.Limited">
+        <label class="form-label small mb-1">{{ '::GeoForge:Client:Field:QuotaLimit' | abpLocalization }}</label>
+        <input
+          type="number"
+          min="1"
+          class="form-control"
+          [value]="form().quotaLimit"
+          (input)="patchForm({ quotaLimit: +$any($event.target).value })"
+        />
+      </div>
+
+      <div class="col-md-6">
+        <label class="form-label small mb-1">{{ '::GeoForge:Client:Field:Expiration' | abpLocalization }}</label>
+        <div class="form-check">
+          <input
+            class="form-check-input"
+            type="checkbox"
+            id="createExpires"
+            [checked]="form().expires"
+            (change)="patchForm({ expires: $any($event.target).checked })"
+          />
+          <label class="form-check-label small" for="createExpires">
+            {{ form().expires ? ('::GeoForge:Client:Field:ExpiresOn' | abpLocalization) : ('::GeoForge:Client:Field:NeverExpires' | abpLocalization) }}
+          </label>
+        </div>
+        <input
+          *ngIf="form().expires"
+          type="datetime-local"
+          class="form-control mt-1"
+          [value]="form().expiresAt"
+          (input)="patchForm({ expiresAt: $any($event.target).value })"
+        />
+      </div>
+      <div class="col-md-6 d-flex align-items-end">
+        <div class="form-check">
+          <input
+            class="form-check-input"
+            type="checkbox"
+            id="createEnabled"
+            [checked]="form().enabled"
+            (change)="patchForm({ enabled: $any($event.target).checked })"
+          />
+          <label class="form-check-label small" for="createEnabled">
+            {{ '::GeoForge:Client:Field:Enabled' | abpLocalization }}
+          </label>
+        </div>
+      </div>
+
+      <div class="col-md-6">
+        <label class="form-label small mb-1">{{ '::GeoForge:Client:Field:IpAllowlist' | abpLocalization }}</label>
+        <input
+          class="form-control"
+          [placeholder]="'::GeoForge:Client:Field:IpAllowlistPlaceholder' | abpLocalization"
+          [value]="form().allowedIpAddresses"
+          (input)="patchForm({ allowedIpAddresses: $any($event.target).value })"
+        />
+      </div>
+      <div class="col-md-6">
+        <label class="form-label small mb-1">{{ '::GeoForge:Client:Field:Notes' | abpLocalization }}</label>
+        <input
+          class="form-control"
+          [value]="form().notes"
+          (input)="patchForm({ notes: $any($event.target).value })"
+        />
+      </div>
+
+      <div class="col-md-6">
+        <label class="form-label small mb-1">{{ '::GeoForge:Client:Field:ContactName' | abpLocalization }}</label>
+        <input
+          class="form-control"
+          [value]="form().contactName"
+          (input)="patchForm({ contactName: $any($event.target).value })"
+        />
+      </div>
+      <div class="col-md-6">
+        <label class="form-label small mb-1">
+          {{ '::GeoForge:Client:Field:ContactEmail' | abpLocalization }}
+          <span *ngIf="willSendCredentials()" class="text-danger">*</span>
+        </label>
+        <input
+          class="form-control"
+          type="email"
+          [class.is-invalid]="willSendCredentials() && form().contactEmail && !contactEmailValid()"
+          [value]="form().contactEmail"
+          (input)="patchForm({ contactEmail: $any($event.target).value })"
+        />
+      </div>
+      <div class="col-12">
+        <div class="form-check">
+          <input
+            class="form-check-input"
+            type="checkbox"
+            id="createSendCredentials"
+            [checked]="form().sendCredentials"
+            [disabled]="!sendCredentialsTemplateEnabled()"
+            (change)="patchForm({ sendCredentials: $any($event.target).checked })"
+          />
+          <label class="form-check-label" for="createSendCredentials">
+            {{ '::GeoForge:Client:Field:SendCredentialsEmail' | abpLocalization }}
+          </label>
+        </div>
+        <small *ngIf="!sendCredentialsTemplateEnabled()" class="text-muted d-block">
+          {{ '::GeoForge:Client:TemplateDisabled' | abpLocalization }}
+        </small>
+      </div>
+    </div>
+
+    <div class="d-flex justify-content-end align-items-center gap-2 mt-3">
+      <!-- Says why Create is disabled, right next to the button, when the block is a missing contact email. -->
+      <small class="text-danger me-auto" *ngIf="willSendCredentials() && !contactEmailValid()">
+        {{ '::GeoForge:Client:ContactEmailRequired' | abpLocalization }}
+      </small>
+      <button class="btn btn-outline-secondary" (click)="toggleCreate()">
+        {{ '::GeoForge:Common:Cancel' | abpLocalization }}
+      </button>
+      <button class="btn btn-primary" [disabled]="!canCreate() || creating()" (click)="createClient()">
+        <span *ngIf="creating()" class="spinner-border spinner-border-sm me-2"></span>
+        {{ '::GeoForge:Client:Create' | abpLocalization }}
+      </button>
+    </div>
+  </div>
 </div>
 
 <!-- Filters -->

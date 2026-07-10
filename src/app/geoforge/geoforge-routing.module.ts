@@ -2,6 +2,9 @@ import { NgModule } from '@angular/core';
 import { RouterModule, Routes } from '@angular/router';
 import { authGuard, permissionGuard } from '@abp/ng.core';
 import { DataSourceUploadComponent } from './components/data-source-upload/data-source-upload.component';
+import { EmailSettingsComponent } from './components/email-settings/email-settings.component';
+import { EmailTemplatesComponent } from './components/email-templates/email-templates.component';
+import { emailTemplatesUnsavedGuard } from './components/email-templates/unsaved-changes.guard';
 import { LayerDetailComponent } from './components/layer-detail/layer-detail.component';
 import { LayerListComponent } from './components/layer-list/layer-list.component';
 import { ClientDetailComponent } from './components/clients/client-detail/client-detail.component';
@@ -67,6 +70,19 @@ const routes: Routes = [
     component: ClientDetailComponent,
     canActivate: [authGuard, permissionGuard],
     data: { requiredPolicy: 'GeoForge.ApiClients' },
+  },
+  {
+    path: 'email-settings',
+    component: EmailSettingsComponent,
+    canActivate: [authGuard, permissionGuard],
+    data: { requiredPolicy: 'GeoForge.EmailSettings.Manage' },
+  },
+  {
+    path: 'email-templates',
+    component: EmailTemplatesComponent,
+    canActivate: [authGuard, permissionGuard],
+    canDeactivate: [emailTemplatesUnsavedGuard],
+    data: { requiredPolicy: 'GeoForge.EmailTemplates.Manage' },
   },
   {
     path: 'audit-logs',

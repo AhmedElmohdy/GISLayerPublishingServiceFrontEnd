@@ -1,0 +1,205 @@
+<div class="card">
+  <div class="card-body">
+    <div class="d-flex flex-wrap justify-content-between align-items-start gap-2 mb-1">
+      <div>
+        <h2 class="mb-1">{{ '::GeoForge:EmailSettings:Title' | abpLocalization }}</h2>
+        <p class="text-muted mb-0">{{ '::GeoForge:EmailSettings:Subtitle' | abpLocalization }}</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Loading skeleton -->
+<div *ngIf="loading()" class="card mt-3">
+  <div class="card-body">
+    <div class="placeholder-glow">
+      <span class="placeholder col-4 mb-3 d-block"></span>
+      <span class="placeholder col-8 mb-2 d-block"></span>
+      <span class="placeholder col-6 mb-2 d-block"></span>
+      <span class="placeholder col-7 mb-2 d-block"></span>
+      <span class="placeholder col-5 d-block"></span>
+    </div>
+  </div>
+</div>
+
+<form *ngIf="!loading()" (ngSubmit)="save()" class="mt-3">
+  <!-- Account Information -->
+  <div class="card mb-3">
+    <div class="card-header fw-semibold">
+      {{ '::GeoForge:EmailSettings:Section:Account' | abpLocalization }}
+    </div>
+    <div class="card-body">
+      <div class="row g-3">
+        <div class="col-md-6">
+          <label class="form-label">{{ '::GeoForge:EmailSettings:Field:DisplayName' | abpLocalization }}</label>
+          <input class="form-control" [value]="form().displayName"
+                 (input)="patch({ displayName: $any($event.target).value })" />
+        </div>
+        <div class="col-md-6">
+          <label class="form-label">{{ '::GeoForge:EmailSettings:Field:SenderEmail' | abpLocalization }}</label>
+          <input class="form-control" type="email" [value]="form().senderEmail"
+                 [class.is-invalid]="errors()['senderEmail']"
+                 (input)="patch({ senderEmail: $any($event.target).value })" />
+          <div class="invalid-feedback" *ngIf="errors()['senderEmail']">
+            {{ errors()['senderEmail'] | abpLocalization }}
+          </div>
+        </div>
+        <div class="col-md-6">
+          <label class="form-label">{{ '::GeoForge:EmailSettings:Field:SmtpUsername' | abpLocalization }}</label>
+          <input class="form-control" [value]="form().smtpUsername"
+                 [class.is-invalid]="errors()['smtpUsername']"
+                 (input)="patch({ smtpUsername: $any($event.target).value })" />
+          <div class="invalid-feedback" *ngIf="errors()['smtpUsername']">
+            {{ errors()['smtpUsername'] | abpLocalization }}
+          </div>
+        </div>
+        <div class="col-md-6">
+          <label class="form-label d-flex justify-content-between">
+            <span>{{ '::GeoForge:EmailSettings:Field:SmtpPassword' | abpLocalization }}</span>
+            <button type="button" class="btn btn-link btn-sm p-0" (click)="toggleShowPassword()">
+              {{ (showPassword() ? '::GeoForge:EmailSettings:HidePassword' : '::GeoForge:EmailSettings:ShowPassword') | abpLocalization }}
+            </button>
+          </label>
+          <input class="form-control" [type]="showPassword() ? 'text' : 'password'"
+                 autocomplete="new-password"
+                 [placeholder]="hasPassword() ? '••••••••' : ''"
+                 [value]="form().password"
+                 (input)="patch({ password: $any($event.target).value })" />
+          <small class="text-muted" *ngIf="hasPassword()">
+            {{ '::GeoForge:EmailSettings:Field:PasswordPlaceholder' | abpLocalization }}
+          </small>
+        </div>
+        <div class="col-md-6">
+          <label class="form-label">{{ '::GeoForge:EmailSettings:Field:PortalUrl' | abpLocalization }}</label>
+          <input class="form-control" [value]="form().portalUrl"
+                 (input)="patch({ portalUrl: $any($event.target).value })" />
+        </div>
+        <div class="col-md-6">
+          <label class="form-label">{{ '::GeoForge:EmailSettings:Field:SupportEmail' | abpLocalization }}</label>
+          <input class="form-control" type="email" [value]="form().supportEmail"
+                 [class.is-invalid]="errors()['supportEmail']"
+                 (input)="patch({ supportEmail: $any($event.target).value })" />
+          <div class="invalid-feedback" *ngIf="errors()['supportEmail']">
+            {{ errors()['supportEmail'] | abpLocalization }}
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Server Settings -->
+  <div class="card mb-3">
+    <div class="card-header fw-semibold">
+      {{ '::GeoForge:EmailSettings:Section:Server' | abpLocalization }}
+    </div>
+    <div class="card-body">
+      <div class="row g-3">
+        <div class="col-md-8">
+          <label class="form-label">{{ '::GeoForge:EmailSettings:Field:Host' | abpLocalization }}</label>
+          <input class="form-control" [value]="form().smtpHost"
+                 [class.is-invalid]="errors()['smtpHost']"
+                 (input)="patch({ smtpHost: $any($event.target).value })" />
+          <div class="invalid-feedback" *ngIf="errors()['smtpHost']">
+            {{ errors()['smtpHost'] | abpLocalization }}
+          </div>
+        </div>
+        <div class="col-md-4">
+          <label class="form-label">{{ '::GeoForge:EmailSettings:Field:Port' | abpLocalization }}</label>
+          <input class="form-control" type="number" min="1" max="65535" [value]="form().smtpPort"
+                 [class.is-invalid]="errors()['smtpPort']"
+                 (input)="patch({ smtpPort: +$any($event.target).value })" />
+          <div class="invalid-feedback" *ngIf="errors()['smtpPort']">
+            {{ errors()['smtpPort'] | abpLocalization }}
+          </div>
+        </div>
+        <div class="col-md-4">
+          <label class="form-label">{{ '::GeoForge:EmailSettings:Field:ConnectionTimeout' | abpLocalization }}</label>
+          <input class="form-control" type="number" min="1" max="300" [value]="form().connectionTimeout"
+                 [class.is-invalid]="errors()['connectionTimeout']"
+                 (input)="patch({ connectionTimeout: +$any($event.target).value })" />
+          <div class="invalid-feedback" *ngIf="errors()['connectionTimeout']">
+            {{ errors()['connectionTimeout'] | abpLocalization }}
+          </div>
+        </div>
+        <div class="col-md-8 d-flex align-items-end">
+          <div class="form-check">
+            <input class="form-check-input" type="checkbox" id="enableSsl" [checked]="form().enableSsl"
+                   (change)="patch({ enableSsl: $any($event.target).checked })" />
+            <label class="form-check-label" for="enableSsl">
+              {{ '::GeoForge:EmailSettings:Field:EnableSsl' | abpLocalization }}
+            </label>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Security / Connection -->
+  <div class="card mb-3">
+    <div class="card-header fw-semibold">
+      {{ '::GeoForge:EmailSettings:Section:Security' | abpLocalization }}
+    </div>
+    <div class="card-body">
+      <div class="form-check mb-2">
+        <input class="form-check-input" type="checkbox" id="authEnabled" [checked]="form().authenticationEnabled"
+               (change)="patch({ authenticationEnabled: $any($event.target).checked })" />
+        <label class="form-check-label" for="authEnabled">
+          {{ '::GeoForge:EmailSettings:Field:AuthenticationEnabled' | abpLocalization }}
+        </label>
+      </div>
+      <div class="form-check">
+        <input class="form-check-input" type="checkbox" id="useDefaultCreds" [checked]="form().useDefaultCredentials"
+               (change)="patch({ useDefaultCredentials: $any($event.target).checked })" />
+        <label class="form-check-label" for="useDefaultCreds">
+          {{ '::GeoForge:EmailSettings:Field:UseDefaultCredentials' | abpLocalization }}
+        </label>
+      </div>
+    </div>
+  </div>
+
+  <!-- Actions -->
+  <div class="d-flex flex-wrap gap-2 mb-4">
+    <button type="submit" class="btn btn-primary" [disabled]="!canSave() || saving()">
+      <span *ngIf="saving()" class="spinner-border spinner-border-sm me-1"></span>
+      {{ '::GeoForge:EmailSettings:Save' | abpLocalization }}
+    </button>
+    <button type="button" class="btn btn-outline-secondary" (click)="openTestDialog()">
+      {{ '::GeoForge:EmailSettings:SendTest' | abpLocalization }}
+    </button>
+  </div>
+</form>
+
+<!-- Test email dialog -->
+<div class="modal fade show d-block" tabindex="-1" *ngIf="testDialogOpen()"
+     style="background: rgba(0,0,0,.5)">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">{{ '::GeoForge:EmailSettings:Section:Test' | abpLocalization }}</h5>
+        <button type="button" class="btn-close" (click)="closeTestDialog()"></button>
+      </div>
+      <div class="modal-body">
+        <label class="form-label">{{ '::GeoForge:EmailSettings:TestRecipient' | abpLocalization }}</label>
+        <input class="form-control" type="email" [value]="testRecipient()"
+               [class.is-invalid]="testRecipient() && !testRecipientValid()"
+               (input)="testRecipient.set($any($event.target).value)" />
+        <div class="invalid-feedback" *ngIf="testRecipient() && !testRecipientValid()">
+          {{ '::GeoForge:EmailSettings:Validation:EmailFormat' | abpLocalization }}
+        </div>
+        <small class="text-muted d-block mt-2">
+          {{ '::GeoForge:EmailSettings:Subtitle' | abpLocalization }}
+        </small>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline-secondary" (click)="closeTestDialog()">
+          {{ '::AbpUi:Cancel' | abpLocalization }}
+        </button>
+        <button type="button" class="btn btn-primary" [disabled]="!testRecipientValid() || testing()"
+                (click)="sendTest()">
+          <span *ngIf="testing()" class="spinner-border spinner-border-sm me-1"></span>
+          {{ '::GeoForge:EmailSettings:SendTest' | abpLocalization }}
+        </button>
+      </div>
+    </div>
+  </div>
+</div>

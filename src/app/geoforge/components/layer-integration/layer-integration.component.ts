@@ -12,8 +12,10 @@ import { debounceTime, distinctUntilChanged, Subject, switchMap } from 'rxjs';
 import { Confirmation, ConfirmationService, ToasterService } from '@abp/ng.theme.shared';
 import { LocalizationService } from '@abp/ng.core';
 import { GeoForgeService } from '../../services/geoforge.service';
+import { EmailTemplateStateService } from '../../services/email-template-state.service';
 import {
   AvailableClient,
+  CLIENT_ID_CREATED_TEMPLATE_KEY,
   ClientEnvironment,
   ClientQuotaType,
   CreateApiClient,
@@ -21,6 +23,8 @@ import {
   LayerClient,
 } from '../../models/geoforge.models';
 import { STATUS_BADGE_CLASS, STATUS_LABEL_KEYS } from '../../models/client-display';
+
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 /** One copyable snippet in the step-by-step guide. */
 interface Snippet {
@@ -41,6 +45,9 @@ interface NewClientForm {
   enabled: boolean;
   allowedIpAddresses: string;
   notes: string;
+  contactName: string;
+  contactEmail: string;
+  sendCredentials: boolean;
 }
 
 /**
@@ -62,6 +69,7 @@ interface NewClientForm {
 })
 export class LayerIntegrationComponent implements OnInit {
   private readonly service = inject(GeoForgeService);
+  private readonly templateState = inject(EmailTemplateStateService);
   private readonly toaster = inject(ToasterService);
   private readonly confirmation = inject(ConfirmationService);
   private readonly localization = inject(LocalizationService);
@@ -97,6 +105,11 @@ export class LayerIntegrationComponent implements OnInit {
   // ---- Create-new state ----
   readonly form = signal<NewClientForm>(this.emptyForm());
 
+  /** Whether the ClientIdCreated template is globally enabled — gates the send-credentials checkbox. */
+  readonly sendCredentialsTemplateEnabled = signal(true);
+
+  readonly contactEmailValid = computed(() => EMAIL_PATTERN.test(this.form().contactEmail.trim()));
+
   readonly exampleClientId = computed(
     () => this.grantedClients()[0]?.clientId ?? 'your-client-id',
   );
@@ -105,6 +118,17 @@ export class LayerIntegrationComponent implements OnInit {
 
   ngOnInit(): void {
     this.loadGranted();
+
+    // Learn whether the creation template is enabled, to gate the send-credentials checkbox. On
+    // no-permission or error the map is empty and the checkbox stays enabled (backend authoritative).
+    this.templateState
+      .enabledMap()
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe(map =>
+        this.sendCredentialsTemplateEnabled.set(
+          this.templateState.isEnabled(map, CLIENT_ID_CREATED_TEMPLATE_KEY),
+        ),
+      );
 
     // The picker query is debounced and switch-mapped, so a fast typist never races two searches
     // and never sees the earlier one's results overwrite the later one's.
@@ -217,8 +241,17 @@ export class LayerIntegrationComponent implements OnInit {
       enabled: true,
       allowedIpAddresses: '',
       notes: '',
+      contactName: '',
+      contactEmail: '',
+      // Checked by default, but disabled (and ignored) when the creation template is off.
+      sendCredentials: true,
     };
   }
+
+  /** Effective: only send when the operator asked and the template is globally enabled. */
+  readonly willSendCredentials = computed(
+    () => this.form().sendCredentials && this.sendCredentialsTemplateEnabled(),
+  );
 
   patchForm(patch: Partial<NewClientForm>): void {
     this.form.update(f => ({ ...f, ...patch }));
@@ -232,6 +265,10 @@ export class LayerIntegrationComponent implements OnInit {
     if (f.quotaType === ClientQuotaType.Limited && (!f.quotaLimit || f.quotaLimit <= 0)) {
       return false;
     }
+    // Contact email is required when credentials will be emailed.
+    if (this.willSendCredentials() && !this.contactEmailValid()) {
+      return false;
+    }
     return true;
   });
 
@@ -240,6 +277,9 @@ export class LayerIntegrationComponent implements OnInit {
     if (!this.canCreate() || this.busy()) {
       return;
     }
+
+    const willSend = this.willSendCredentials();
+    const contactEmail = f.contactEmail.trim() || undefined;
 
     const input: CreateApiClient = {
       name: f.name.trim(),
@@ -251,6 +291,10 @@ export class LayerIntegrationComponent implements OnInit {
       allowedIpAddresses: f.allowedIpAddresses.trim() || undefined,
       notes: f.notes.trim() || undefined,
       environment: ClientEnvironment.Unspecified,
+      contactName: f.contactName.trim() || undefined,
+      contactEmail,
+      // Sent explicitly, gated by the template being enabled.
+      sendNotificationEmail: willSend,
       // The whole point of creating here: the new client can read this layer immediately.
       grantedLayerIds: [this.layer.id],
     };
@@ -263,10 +307,16 @@ export class LayerIntegrationComponent implements OnInit {
         next: result => {
           this.busy.set(false);
           this.form.set(this.emptyForm());
+          // The one-time secret is always shown — the email is a convenience, never the only copy.
           this.revealedSecret.set({ clientId: result.client.clientId, secret: result.secret });
           this.toaster.success(
             this.t('::GeoForge:Client:CreatedToast', result.client.clientId),
           );
+          // The email is dispatched after commit, so its outcome is not in this response. Tell the
+          // operator it was queued, and that the secret above is the authoritative copy either way.
+          if (willSend && contactEmail) {
+            this.toaster.info(this.t('::GeoForge:Client:CredentialsEmailQueued', contactEmail));
+          }
           this.mode.set('existing');
           this.loadGranted();
           this.searchTrigger.next();

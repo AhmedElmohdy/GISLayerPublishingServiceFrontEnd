@@ -1,4 +1,4 @@
-import { Component, DestroyRef, OnInit, inject, signal } from '@angular/core';
+import { Component, DestroyRef, OnInit, computed, inject, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { ActivatedRoute } from '@angular/router';
 import { Confirmation, ConfirmationService, ToasterService } from '@abp/ng.theme.shared';
@@ -9,8 +9,10 @@ import {
   ApiClientLayer,
   ApiClientStatus,
   ClientAuditLog,
+  ClientEnvironment,
   ClientQuotaType,
   GisLayerListItem,
+  UpdateApiClient,
 } from '../../../models/geoforge.models';
 import {
   isActive,
@@ -20,7 +22,19 @@ import {
   STATUS_LABEL_KEYS,
 } from '../../../models/client-display';
 
-type Tab = 'overview' | 'credentials' | 'layers' | 'usage' | 'audit';
+type Tab = 'overview' | 'credentials' | 'layers' | 'notifications' | 'usage' | 'audit';
+
+/** The notification-preferences form's local state, mirroring the persisted client fields. */
+interface NotificationForm {
+  contactName: string;
+  contactEmail: string;
+  notificationEmail: string;
+  notificationContactName: string;
+  notifyOnPermissionChange: boolean;
+  notifyOnLayerAccessChange: boolean;
+  notifyOnStatusChange: boolean;
+  notifyOnQuotaChange: boolean;
+}
 
 /**
  * The client detail page at /geoforge/clients/:id.
@@ -56,6 +70,31 @@ export class ClientDetailComponent implements OnInit {
   readonly loading = signal(true);
   readonly tab = signal<Tab>('overview');
 
+  /** The operation-level "send email notification" switch, shared by the status and layer actions. */
+  readonly notifyOnAction = signal(true);
+
+  /** The notification address the client would be emailed at, or null when none is set. */
+  readonly recipientEmail = computed(() => {
+    const c = this.client();
+    return (c?.notificationEmail || c?.contactEmail) ?? null;
+  });
+  readonly hasRecipient = computed(() => !!this.recipientEmail());
+
+  /** Whether a given action would actually notify: opted in and a recipient exists. */
+  readonly willNotify = computed(() => this.notifyOnAction() && this.hasRecipient());
+
+  readonly notifForm = signal<NotificationForm>({
+    contactName: '',
+    contactEmail: '',
+    notificationEmail: '',
+    notificationContactName: '',
+    notifyOnPermissionChange: true,
+    notifyOnLayerAccessChange: true,
+    notifyOnStatusChange: true,
+    notifyOnQuotaChange: true,
+  });
+  readonly savingNotif = signal(false);
+
   readonly layers = signal<ApiClientLayer[]>([]);
   readonly loadingLayers = signal(false);
 
@@ -81,9 +120,73 @@ export class ClientDetailComponent implements OnInit {
       .subscribe({
         next: client => {
           this.client.set(client);
+          this.syncNotifForm(client);
           this.loading.set(false);
         },
         error: () => this.loading.set(false),
+      });
+  }
+
+  private syncNotifForm(client: ApiClient): void {
+    this.notifForm.set({
+      contactName: client.contactName ?? '',
+      contactEmail: client.contactEmail ?? '',
+      notificationEmail: client.notificationEmail ?? '',
+      notificationContactName: client.notificationContactName ?? '',
+      notifyOnPermissionChange: client.notifyOnPermissionChange ?? true,
+      notifyOnLayerAccessChange: client.notifyOnLayerAccessChange ?? true,
+      notifyOnStatusChange: client.notifyOnStatusChange ?? true,
+      notifyOnQuotaChange: client.notifyOnQuotaChange ?? true,
+    });
+  }
+
+  patchNotif(patch: Partial<NotificationForm>): void {
+    this.notifForm.update(f => ({ ...f, ...patch }));
+  }
+
+  /** Persists the contact + notification-preference fields via the existing client update endpoint. */
+  saveNotifications(): void {
+    const c = this.client();
+    if (!c || this.savingNotif()) {
+      return;
+    }
+    const f = this.notifForm();
+
+    // Echo the client's current non-notification fields so the update changes only the contact and
+    // preference fields — and pass sendEmailNotification:false, since this save is not an access change.
+    const input: UpdateApiClient = {
+      name: c.name,
+      description: c.description,
+      expiresAt: c.expiresAt,
+      rateLimitPerMinute: c.rateLimitPerMinute,
+      rateLimitPerHour: c.rateLimitPerHour,
+      allowedIpAddresses: c.allowedIpAddresses,
+      notes: c.notes,
+      environment: c.environment ?? ClientEnvironment.Unspecified,
+      tags: c.tags,
+      contactName: f.contactName.trim() || undefined,
+      contactEmail: f.contactEmail.trim() || undefined,
+      notificationEmail: f.notificationEmail.trim() || undefined,
+      notificationContactName: f.notificationContactName.trim() || undefined,
+      notifyOnPermissionChange: f.notifyOnPermissionChange,
+      notifyOnLayerAccessChange: f.notifyOnLayerAccessChange,
+      notifyOnStatusChange: f.notifyOnStatusChange,
+      notifyOnQuotaChange: f.notifyOnQuotaChange,
+      sendEmailNotification: false,
+    };
+
+    this.savingNotif.set(true);
+    this.service
+      .updateApiClient(c.id, input)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: updated => {
+          this.savingNotif.set(false);
+          this.client.set(updated);
+          this.syncNotifForm(updated);
+          this.toaster.success(this.t('::GeoForge:Client:NotificationsSaved'));
+        },
+        error: () => this.savingNotif.set(false),
       });
   }
 
@@ -100,14 +203,20 @@ export class ClientDetailComponent implements OnInit {
   // ---- Status actions ------------------------------------------------------
 
   activate(): void {
-    this.act(this.service.activateApiClient(this.clientId()), '::GeoForge:ClientAdmin:Toast:Activated');
+    this.act(
+      this.service.activateApiClient(this.clientId(), this.willNotify()),
+      '::GeoForge:ClientAdmin:Toast:Activated',
+    );
   }
 
   suspend(): void {
     const c = this.client();
     if (!c) return;
     this.confirmThen('::GeoForge:ClientAdmin:Confirm:SuspendTitle', '::GeoForge:ClientAdmin:Confirm:Suspend', c.name, () =>
-      this.act(this.service.suspendApiClient(this.clientId()), '::GeoForge:ClientAdmin:Toast:Suspended'),
+      this.act(
+        this.service.suspendApiClient(this.clientId(), this.willNotify()),
+        '::GeoForge:ClientAdmin:Toast:Suspended',
+      ),
     );
   }
 
@@ -115,7 +224,10 @@ export class ClientDetailComponent implements OnInit {
     const c = this.client();
     if (!c) return;
     this.confirmThen('::GeoForge:ClientAdmin:Confirm:RevokeTitle', '::GeoForge:ClientAdmin:Confirm:Revoke', c.name, () =>
-      this.act(this.service.revokeApiClient(this.clientId()), '::GeoForge:ClientAdmin:Toast:Revoked'),
+      this.act(
+        this.service.revokeApiClient(this.clientId(), this.willNotify()),
+        '::GeoForge:ClientAdmin:Toast:Revoked',
+      ),
     );
   }
 
@@ -185,7 +297,7 @@ export class ClientDetailComponent implements OnInit {
     if (!layerId) return;
 
     this.service
-      .grantLayerAccess(this.clientId(), { layerId })
+      .grantLayerAccess(this.clientId(), { layerId, sendEmailNotification: this.willNotify() })
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
         next: () => {
@@ -216,7 +328,7 @@ export class ClientDetailComponent implements OnInit {
       layer.displayName,
       () =>
         this.service
-          .revokeLayerAccess(this.clientId(), layer.layerId)
+          .revokeLayerAccess(this.clientId(), layer.layerId, this.willNotify())
           .pipe(takeUntilDestroyed(this.destroyRef))
           .subscribe(() => {
             this.toaster.success(this.t('::GeoForge:Layer:AccessRemovedToast'));

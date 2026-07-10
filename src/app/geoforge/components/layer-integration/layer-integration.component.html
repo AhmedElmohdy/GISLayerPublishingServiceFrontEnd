@@ -231,6 +231,50 @@
               (input)="patchForm({ notes: $any($event.target).value })"
             />
           </div>
+
+          <!-- Contact + notification -->
+          <div class="col-md-6">
+            <label class="form-label small mb-1">{{ '::GeoForge:Client:Field:ContactName' | abpLocalization }}</label>
+            <input
+              class="form-control"
+              [value]="form().contactName"
+              (input)="patchForm({ contactName: $any($event.target).value })"
+            />
+          </div>
+          <div class="col-md-6">
+            <label class="form-label small mb-1">
+              {{ '::GeoForge:Client:Field:ContactEmail' | abpLocalization }}
+              <span *ngIf="willSendCredentials()" class="text-danger">*</span>
+            </label>
+            <input
+              class="form-control"
+              type="email"
+              [class.is-invalid]="willSendCredentials() && form().contactEmail && !contactEmailValid()"
+              [value]="form().contactEmail"
+              (input)="patchForm({ contactEmail: $any($event.target).value })"
+            />
+          </div>
+          <div class="col-12">
+            <div class="form-check">
+              <input
+                class="form-check-input"
+                type="checkbox"
+                id="sendCredentials"
+                [checked]="form().sendCredentials"
+                [disabled]="!sendCredentialsTemplateEnabled()"
+                (change)="patchForm({ sendCredentials: $any($event.target).checked })"
+              />
+              <label class="form-check-label" for="sendCredentials">
+                {{ '::GeoForge:Client:Field:SendCredentialsEmail' | abpLocalization }}
+              </label>
+            </div>
+            <small *ngIf="!sendCredentialsTemplateEnabled()" class="text-muted d-block">
+              {{ '::GeoForge:Client:TemplateDisabled' | abpLocalization }}
+            </small>
+            <small *ngIf="willSendCredentials() && !contactEmailValid()" class="text-danger d-block">
+              {{ '::GeoForge:Client:ContactEmailRequired' | abpLocalization }}
+            </small>
+          </div>
         </div>
 
         <button

@@ -1,0 +1,166 @@
+<div class="card">
+  <div class="card-body">
+    <h2 class="mb-1">{{ '::GeoForge:EmailTemplates:Title' | abpLocalization }}</h2>
+    <p class="text-muted mb-0">{{ '::GeoForge:EmailTemplates:Subtitle' | abpLocalization }}</p>
+  </div>
+</div>
+
+<div *ngIf="loading()" class="card mt-3">
+  <div class="card-body placeholder-glow">
+    <span class="placeholder col-3 mb-3 d-block"></span>
+    <span class="placeholder col-9 mb-2 d-block"></span>
+    <span class="placeholder col-7 d-block"></span>
+  </div>
+</div>
+
+<!-- Error state: a failed load is visible and retryable, never a blank page. -->
+<div *ngIf="!loading() && loadError()" class="alert alert-danger mt-3 d-flex justify-content-between align-items-center">
+  <span>{{ '::GeoForge:EmailTemplates:LoadError' | abpLocalization }}</span>
+  <button type="button" class="btn btn-sm btn-outline-danger" (click)="load()">
+    {{ '::AbpUi:Refresh' | abpLocalization }}
+  </button>
+</div>
+
+<!-- Empty state: a successful but empty list (seed not run) is explained, not silent. -->
+<div *ngIf="!loading() && !loadError() && templates().length === 0" class="alert alert-warning mt-3">
+  {{ '::GeoForge:EmailTemplates:Empty' | abpLocalization }}
+</div>
+
+<div *ngIf="!loading() && !loadError() && templates().length" class="row g-3 mt-1">
+  <!-- Master: template list -->
+  <div class="col-lg-4">
+    <div class="list-group">
+      <button *ngFor="let template of templates()" type="button"
+              class="list-group-item list-group-item-action d-flex justify-content-between align-items-center"
+              [class.active]="template.templateKey === selectedKey()"
+              (click)="select(template)">
+        <span class="text-truncate">
+          {{ templateName(template) }}
+          <i *ngIf="dirty() && template.templateKey === selectedKey()" class="fas fa-circle text-warning ms-1"
+             style="font-size:.5rem" [title]="'::GeoForge:EmailTemplates:Unsaved' | abpLocalization"></i>
+        </span>
+        <span class="badge" [class.bg-success]="template.isEnabled" [class.bg-secondary]="!template.isEnabled">
+          {{ (template.isEnabled ? '::GeoForge:EmailTemplates:Field:IsEnabled' : '::AbpUi:Disabled') | abpLocalization }}
+        </span>
+      </button>
+    </div>
+  </div>
+
+  <!-- Detail: editor -->
+  <div class="col-lg-8" *ngIf="selected() as template">
+    <div class="card">
+      <div class="card-body">
+        <div class="d-flex flex-wrap justify-content-between align-items-start gap-2 mb-2">
+          <div>
+            <h4 class="mb-1">{{ templateName(template) }}</h4>
+            <p class="text-muted small mb-0">{{ template.description }}</p>
+          </div>
+          <div class="form-check form-switch mt-1">
+            <input class="form-check-input" type="checkbox" id="tplEnabled" [checked]="editor().isEnabled"
+                   (change)="patch({ isEnabled: $any($event.target).checked })" />
+            <label class="form-check-label" for="tplEnabled">
+              {{ '::GeoForge:EmailTemplates:Field:IsEnabled' | abpLocalization }}
+            </label>
+          </div>
+        </div>
+
+        <div class="mb-2">
+          <label class="form-label small text-muted mb-0">
+            {{ '::GeoForge:EmailTemplates:Field:TemplateKey' | abpLocalization }}
+          </label>
+          <div><code>{{ template.templateKey }}</code></div>
+        </div>
+
+        <div class="row g-3">
+          <div class="col-12">
+            <label class="form-label">{{ '::GeoForge:EmailTemplates:Field:Subject' | abpLocalization }}</label>
+            <input class="form-control" [value]="editor().subject"
+                   (input)="patch({ subject: $any($event.target).value })" />
+          </div>
+
+          <div class="col-12 col-xl-8">
+            <div class="d-flex justify-content-between align-items-center">
+              <label class="form-label mb-0">{{ '::GeoForge:EmailTemplates:Field:Body' | abpLocalization }}</label>
+              <div class="form-check form-switch">
+                <input class="form-check-input" type="checkbox" id="tplHtml" [checked]="editor().isHtml"
+                       (change)="patch({ isHtml: $any($event.target).checked })" />
+                <label class="form-check-label small" for="tplHtml">
+                  {{ '::GeoForge:EmailTemplates:Field:IsHtml' | abpLocalization }}
+                </label>
+              </div>
+            </div>
+            <textarea class="form-control font-monospace" rows="14"
+                      [value]="editor().body"
+                      (input)="patch({ body: $any($event.target).value })"></textarea>
+
+            <div *ngIf="unknownPlaceholders().length" class="alert alert-warning mt-2 mb-0 py-2">
+              <i class="fas fa-triangle-exclamation me-1"></i>
+              {{ '::GeoForge:EmailTemplates:UnknownPlaceholders' | abpLocalization }}
+              <strong>{{ unknownPlaceholders().join(', ') }}</strong>
+            </div>
+          </div>
+
+          <!-- Placeholder helper -->
+          <div class="col-12 col-xl-4">
+            <label class="form-label">{{ '::GeoForge:EmailTemplates:Placeholders' | abpLocalization }}</label>
+            <p class="small text-muted">{{ '::GeoForge:EmailTemplates:PlaceholdersHint' | abpLocalization }}</p>
+            <div class="d-flex flex-wrap gap-1">
+              <button *ngFor="let ph of template.availablePlaceholders" type="button"
+                      class="btn btn-sm btn-outline-secondary font-monospace"
+                      (click)="copyPlaceholder(ph)">{{ '{{' + ph + '}}' }}</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="d-flex flex-wrap gap-2 mt-3 align-items-center">
+          <button type="button" class="btn btn-primary"
+                  [disabled]="saving() || unknownPlaceholders().length > 0 || !dirty()"
+                  (click)="save()">
+            <span *ngIf="saving()" class="spinner-border spinner-border-sm me-1"></span>
+            {{ '::GeoForge:EmailTemplates:Save' | abpLocalization }}
+          </button>
+          <button type="button" class="btn btn-outline-secondary" [disabled]="restoring()" (click)="restore()">
+            <span *ngIf="restoring()" class="spinner-border spinner-border-sm me-1"></span>
+            {{ '::GeoForge:EmailTemplates:Restore' | abpLocalization }}
+          </button>
+          <button type="button" class="btn btn-outline-secondary" (click)="openPreviewDialog()">
+            {{ '::GeoForge:EmailTemplates:Preview' | abpLocalization }}
+          </button>
+          <span class="text-muted small ms-auto" *ngIf="template.lastModificationTime">
+            {{ '::GeoForge:EmailTemplates:Field:LastModified' | abpLocalization }}:
+            {{ template.lastModificationTime | date: 'short' }}
+          </span>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Preview dialog -->
+<div class="modal fade show d-block" tabindex="-1" *ngIf="previewDialogOpen()"
+     style="background: rgba(0,0,0,.5)">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">{{ '::GeoForge:EmailTemplates:Preview' | abpLocalization }}</h5>
+        <button type="button" class="btn-close" (click)="closePreviewDialog()"></button>
+      </div>
+      <div class="modal-body">
+        <label class="form-label">{{ '::GeoForge:EmailTemplates:PreviewRecipient' | abpLocalization }}</label>
+        <input class="form-control" type="email" [value]="previewRecipient()"
+               [class.is-invalid]="previewRecipient() && !previewRecipientValid()"
+               (input)="previewRecipient.set($any($event.target).value)" />
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline-secondary" (click)="closePreviewDialog()">
+          {{ '::AbpUi:Cancel' | abpLocalization }}
+        </button>
+        <button type="button" class="btn btn-primary" [disabled]="!previewRecipientValid() || previewing()"
+                (click)="sendPreview()">
+          <span *ngIf="previewing()" class="spinner-border spinner-border-sm me-1"></span>
+          {{ '::GeoForge:EmailTemplates:Preview' | abpLocalization }}
+        </button>
+      </div>
+    </div>
+  </div>
+</div>

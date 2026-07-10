@@ -11,6 +11,8 @@ import {
   CreateApiClient,
   CreateRemoteDataSource,
   DataSource,
+  EmailSettings,
+  EmailTemplate,
   GisLayer,
   GisLayerListItem,
   GrantLayerAccess,
@@ -22,8 +24,12 @@ import {
   LayerStyle,
   PagedResult,
   RemoteServiceMetadata,
+  SendTemplatePreview,
+  SendTestEmail,
   SourceProbeResult,
   UpdateApiClient,
+  UpdateEmailSettings,
+  UpdateEmailTemplate,
   UpdateQuota,
   UploadResult,
 } from '../models/geoforge.models';
@@ -251,16 +257,22 @@ export class GeoForgeService {
 
   // ---- Client status -------------------------------------------------------
 
-  activateApiClient(id: string): Observable<ApiClient> {
-    return this.http.post<ApiClient>(`${this.base}/api-clients/${id}/activate`, {});
+  activateApiClient(id: string, sendEmailNotification = true): Observable<ApiClient> {
+    return this.http.post<ApiClient>(`${this.base}/api-clients/${id}/activate`, {}, {
+      params: queryParams({ sendEmailNotification }),
+    });
   }
 
-  suspendApiClient(id: string): Observable<ApiClient> {
-    return this.http.post<ApiClient>(`${this.base}/api-clients/${id}/suspend`, {});
+  suspendApiClient(id: string, sendEmailNotification = true): Observable<ApiClient> {
+    return this.http.post<ApiClient>(`${this.base}/api-clients/${id}/suspend`, {}, {
+      params: queryParams({ sendEmailNotification }),
+    });
   }
 
-  revokeApiClient(id: string): Observable<ApiClient> {
-    return this.http.post<ApiClient>(`${this.base}/api-clients/${id}/revoke`, {});
+  revokeApiClient(id: string, sendEmailNotification = true): Observable<ApiClient> {
+    return this.http.post<ApiClient>(`${this.base}/api-clients/${id}/revoke`, {}, {
+      params: queryParams({ sendEmailNotification }),
+    });
   }
 
   bulkSuspendApiClients(ids: string[]): Observable<number> {
@@ -315,8 +327,10 @@ export class GeoForgeService {
     return this.http.post<ApiClientLayer>(`${this.base}/api-clients/${id}/layers`, input);
   }
 
-  revokeLayerAccess(id: string, layerId: string): Observable<void> {
-    return this.http.delete<void>(`${this.base}/api-clients/${id}/layers/${layerId}`);
+  revokeLayerAccess(id: string, layerId: string, sendEmailNotification = true): Observable<void> {
+    return this.http.delete<void>(`${this.base}/api-clients/${id}/layers/${layerId}`, {
+      params: queryParams({ sendEmailNotification }),
+    });
   }
 
   setLayerAccessEnabled(id: string, layerId: string, isEnabled: boolean): Observable<ApiClientLayer> {
@@ -343,6 +357,43 @@ export class GeoForgeService {
     return this.http.get<PagedResult<ClientAuditLog>>(`${this.base}/api-clients/${id}/audit-log`, {
       params: queryParams(params),
     });
+  }
+
+  // ---- Email settings ------------------------------------------------------
+
+  getEmailSettings(): Observable<EmailSettings> {
+    return this.http.get<EmailSettings>(`${this.base}/email-settings`);
+  }
+
+  updateEmailSettings(input: UpdateEmailSettings): Observable<EmailSettings> {
+    return this.http.put<EmailSettings>(`${this.base}/email-settings`, input);
+  }
+
+  /** Sends a real test message using the supplied (possibly unsaved) settings. */
+  sendTestEmail(input: SendTestEmail): Observable<void> {
+    return this.http.post<void>(`${this.base}/email-settings/test`, input);
+  }
+
+  // ---- Email templates -----------------------------------------------------
+
+  getEmailTemplates(): Observable<EmailTemplate[]> {
+    return this.http.get<EmailTemplate[]>(`${this.base}/email-templates`);
+  }
+
+  getEmailTemplate(templateKey: string): Observable<EmailTemplate> {
+    return this.http.get<EmailTemplate>(`${this.base}/email-templates/${templateKey}`);
+  }
+
+  updateEmailTemplate(templateKey: string, input: UpdateEmailTemplate): Observable<EmailTemplate> {
+    return this.http.put<EmailTemplate>(`${this.base}/email-templates/${templateKey}`, input);
+  }
+
+  restoreEmailTemplate(templateKey: string): Observable<EmailTemplate> {
+    return this.http.post<EmailTemplate>(`${this.base}/email-templates/${templateKey}/restore-default`, {});
+  }
+
+  sendTemplatePreview(templateKey: string, input: SendTemplatePreview): Observable<void> {
+    return this.http.post<void>(`${this.base}/email-templates/${templateKey}/preview`, input);
   }
 
   /** The token endpoint external systems call. Exposed so the UI can name it in its examples. */

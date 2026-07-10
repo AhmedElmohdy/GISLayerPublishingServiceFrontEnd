@@ -66,6 +66,22 @@ function configureRoutes() {
         requiredPolicy: 'GeoForge.DataSources.Import',
       },
       {
+        path: '/geoforge/email-settings',
+        name: '::Menu:GeoForge:EmailSettings',
+        parentName: '::Menu:GeoForge',
+        order: 8,
+        layout: eLayoutType.application,
+        requiredPolicy: 'GeoForge.EmailSettings.Manage',
+      },
+      {
+        path: '/geoforge/email-templates',
+        name: '::Menu:GeoForge:EmailTemplates',
+        parentName: '::Menu:GeoForge',
+        order: 9,
+        layout: eLayoutType.application,
+        requiredPolicy: 'GeoForge.EmailTemplates.Manage',
+      },
+      {
         path: '/geoforge/health',
         name: '::Menu:GeoForge:Health',
         parentName: '::Menu:GeoForge',

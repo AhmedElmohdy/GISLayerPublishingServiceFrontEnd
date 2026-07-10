@@ -4,6 +4,8 @@ import { GeoForgeRoutingModule } from './geoforge-routing.module';
 import { ClientDetailComponent } from './components/clients/client-detail/client-detail.component';
 import { ClientListComponent } from './components/clients/client-list/client-list.component';
 import { DataSourceUploadComponent } from './components/data-source-upload/data-source-upload.component';
+import { EmailSettingsComponent } from './components/email-settings/email-settings.component';
+import { EmailTemplatesComponent } from './components/email-templates/email-templates.component';
 import { LayerDetailComponent } from './components/layer-detail/layer-detail.component';
 import { LayerIntegrationComponent } from './components/layer-integration/layer-integration.component';
 import { LayerListComponent } from './components/layer-list/layer-list.component';
@@ -46,6 +48,10 @@ import { StatusBadgeComponent } from './components/monitoring/status-badge.compo
     // Client administration
     ClientListComponent,
     ClientDetailComponent,
+
+    // Email notifications
+    EmailSettingsComponent,
+    EmailTemplatesComponent,
 
     // Monitoring primitives
     KpiCardComponent,
