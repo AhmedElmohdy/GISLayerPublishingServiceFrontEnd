@@ -216,6 +216,20 @@
               "extractLicenses": false,
               "sourceMap": true,
               "namedChunks": true
+            },
+            "test": {
+              "buildOptimizer": false,
+              "optimization": false,
+              "vendorChunk": true,
+              "extractLicenses": false,
+              "sourceMap": true,
+              "namedChunks": true,
+              "fileReplacements": [
+                {
+                  "replace": "src/environments/environment.ts",
+                  "with": "src/environments/environment.test.ts"
+                }
+              ]
             }
           },
           "defaultConfiguration": "production"
@@ -228,6 +242,9 @@
             },
             "development": {
               "buildTarget": "GISLayerPublishingService:build:development"
+            },
+            "test": {
+              "buildTarget": "GISLayerPublishingService:build:test"
             }
           },
           "defaultConfiguration": "development",
