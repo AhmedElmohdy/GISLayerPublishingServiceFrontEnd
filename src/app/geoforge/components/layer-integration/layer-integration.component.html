@@ -58,7 +58,7 @@
         </button>
       </div>
 
-      <!-- ---- A. Choose existing ---- -->
+      <!-- ---- A. Choose existing (bulk multi-select) ---- -->
       <div *ngIf="mode() === 'existing'">
         <div class="d-flex flex-wrap gap-2 align-items-center mb-2">
           <input
@@ -82,38 +82,73 @@
           </div>
         </div>
 
-        <div *ngIf="loadingAvailable()" class="text-center py-3">
-          <div class="spinner-border spinner-border-sm"></div>
+        <!-- Selection toolbar -->
+        <div class="d-flex flex-wrap align-items-center gap-2 mb-2">
+          <button
+            type="button"
+            class="btn btn-sm btn-outline-secondary"
+            data-testid="bulk-select-all"
+            [disabled]="!availableClients().length"
+            (click)="toggleSelectAll()"
+          >
+            {{ (allLoadedSelected() ? '::GeoForge:Integration:ClearSelection' : '::GeoForge:Integration:SelectAll') | abpLocalization }}
+          </button>
+          <span class="small text-muted" data-testid="bulk-count">
+            {{ '::GeoForge:Integration:SelectedCount' | abpLocalization: (selectedCount() + '') }}
+          </span>
+        </div>
+
+        <!-- Selected chips -->
+        <div class="d-flex flex-wrap gap-1 mb-2" *ngIf="selectedCount()">
+          <span
+            class="badge rounded-pill bg-primary text-white d-inline-flex align-items-center"
+            *ngFor="let c of selectedList()"
+          >
+            {{ c.name }}
+            <button
+              type="button"
+              class="btn-close btn-close-white ms-1"
+              style="font-size: 0.6rem"
+              [attr.aria-label]="'::GeoForge:Common:RemoveAccess' | abpLocalization"
+              (click)="removeSelected(c.id)"
+            ></button>
+          </span>
         </div>
 
         <p class="text-muted small mb-2" *ngIf="!loadingAvailable() && availableClients().length === 0">
           {{ '::GeoForge:Integration:NoSelectableClients' | abpLocalization }}
         </p>
 
-        <div class="list-group mb-3" *ngIf="!loadingAvailable() && availableClients().length">
-          <button
-            type="button"
-            class="list-group-item list-group-item-action d-flex justify-content-between align-items-center"
-            *ngFor="let c of availableClients()"
-            [class.active]="c.id === selectedClientId()"
-            [class.disabled]="!c.isSelectable"
-            [attr.aria-disabled]="!c.isSelectable"
-            (click)="select(c)"
+        <!-- Virtual-scrolled, paged client list -->
+        <cdk-virtual-scroll-viewport
+          itemSize="52"
+          class="border rounded mb-2"
+          style="height: 300px"
+          *ngIf="availableClients().length"
+          (scrolledIndexChange)="onScrolledIndexChange($event)"
+        >
+          <div
+            *cdkVirtualFor="let c of availableClients()"
+            class="d-flex align-items-center gap-2 px-2 border-bottom"
+            style="height: 52px; cursor: pointer"
+            [class.bg-body-secondary]="isSelected(c.id)"
+            (click)="toggleSelect(c)"
           >
-            <span class="text-truncate">
+            <input
+              class="form-check-input mt-0 flex-shrink-0"
+              type="checkbox"
+              tabindex="-1"
+              style="pointer-events: none"
+              [checked]="isSelected(c.id)"
+            />
+            <span class="text-truncate flex-grow-1">
               <span class="fw-semibold">{{ c.name }}</span>
               <code class="ms-2 small">{{ c.clientId }}</code>
               <span class="text-muted small ms-2">
                 · {{ '::GeoForge:Integration:AssignedLayers' | abpLocalization: (c.grantedLayerCount + '') }}
               </span>
-              <span class="text-muted small ms-2" *ngIf="c.quotaType === ClientQuotaType.Limited">
-                · {{ '::GeoForge:Client:Quota:Remaining' | abpLocalization: ((c.remainingRequests ?? 0) + '') }}
-              </span>
-              <span class="text-muted small ms-2" *ngIf="c.quotaType !== ClientQuotaType.Limited">
-                · {{ '::GeoForge:Client:Quota:Unlimited' | abpLocalization }}
-              </span>
             </span>
-            <span class="text-nowrap">
+            <span class="text-nowrap flex-shrink-0">
               <span class="badge" [ngClass]="statusBadgeClass[c.effectiveStatus]">
                 {{ statusLabelKeys[c.effectiveStatus] | abpLocalization }}
               </span>
@@ -121,17 +156,49 @@
                 {{ '::GeoForge:Integration:AlreadyGranted' | abpLocalization }}
               </span>
             </span>
+          </div>
+        </cdk-virtual-scroll-viewport>
+
+        <div *ngIf="loadingAvailable()" class="text-center py-2">
+          <div class="spinner-border spinner-border-sm"></div>
+        </div>
+
+        <!-- Notification preference -->
+        <div class="form-check mb-2">
+          <input
+            class="form-check-input"
+            type="checkbox"
+            id="bulkSendEmail"
+            [checked]="sendEmail()"
+            (change)="sendEmail.set($any($event.target).checked)"
+          />
+          <label class="form-check-label small" for="bulkSendEmail">
+            {{ '::GeoForge:Integration:SendEmailToAffected' | abpLocalization }}
+          </label>
+        </div>
+
+        <!-- Grant action -->
+        <div class="d-flex gap-2">
+          <button class="btn btn-primary" data-testid="bulk-grant" [disabled]="!selectedCount() || processing()" (click)="grant()">
+            <span *ngIf="processing()" class="spinner-border spinner-border-sm me-2"></span>
+            {{ '::GeoForge:Integration:GrantAccess' | abpLocalization }}
           </button>
         </div>
 
-        <button
-          class="btn btn-primary"
-          [disabled]="!selectedClientId() || busy()"
-          (click)="grantSelected()"
+        <!-- Progress while a bulk operation runs -->
+        <div class="progress mt-2" style="height: 4px" *ngIf="processing()">
+          <div class="progress-bar progress-bar-striped progress-bar-animated" style="width: 100%"></div>
+        </div>
+
+        <!-- Grant summary -->
+        <div
+          class="alert alert-success mt-2 mb-0 py-2 small"
+          data-testid="bulk-grant-summary"
+          *ngIf="lastResult() as r"
+          [hidden]="r.action !== 'grant'"
         >
-          <span *ngIf="busy()" class="spinner-border spinner-border-sm me-2"></span>
-          {{ '::GeoForge:Integration:GrantAccess' | abpLocalization }}
-        </button>
+          {{ '::GeoForge:Integration:BulkResult' | abpLocalization: (r.added + '') : (r.alreadyExists + '') : (r.failed + '') }}
+        </div>
       </div>
 
       <!-- ---- B. Create new ---- -->
@@ -291,8 +358,34 @@
 
   <!-- ============ Clients with access ============ -->
   <div class="card mb-3">
-    <div class="card-header">
+    <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
       <h6 class="card-title mb-0">{{ '::GeoForge:Layer:ClientsTitle' | abpLocalization }}</h6>
+      <!-- Bulk-remove toolbar, shown once granted clients are selected below. -->
+      <div class="d-flex align-items-center gap-2" *ngIf="grantedSelectedCount()">
+        <div class="form-check mb-0">
+          <input
+            class="form-check-input"
+            type="checkbox"
+            id="removeSendEmail"
+            [checked]="sendEmail()"
+            (change)="sendEmail.set($any($event.target).checked)"
+          />
+          <label class="form-check-label small" for="removeSendEmail">
+            {{ '::GeoForge:Integration:SendEmailToAffected' | abpLocalization }}
+          </label>
+        </div>
+        <span class="small text-muted" data-testid="granted-count">
+          {{ '::GeoForge:Integration:SelectedCount' | abpLocalization: (grantedSelectedCount() + '') }}
+        </span>
+        <button
+          class="btn btn-sm btn-outline-danger"
+          data-testid="bulk-remove"
+          [disabled]="processing()"
+          (click)="removeSelectedGranted()"
+        >
+          {{ '::GeoForge:Integration:RemoveAccess' | abpLocalization }}
+        </button>
+      </div>
     </div>
     <div class="card-body">
       <div *ngIf="loadingGranted()" class="text-center py-3">
@@ -303,10 +396,30 @@
         {{ '::GeoForge:Layer:NoClients' | abpLocalization }}
       </p>
 
+      <!-- Remove summary -->
+      <div
+        class="alert alert-warning py-2 small"
+        data-testid="bulk-remove-summary"
+        *ngIf="lastResult() as r"
+        [hidden]="r.action !== 'remove'"
+      >
+        {{ '::GeoForge:Integration:BulkResult' | abpLocalization: (r.added + '') : (r.alreadyExists + '') : (r.failed + '') }}
+      </div>
+
       <div class="table-responsive" *ngIf="!loadingGranted() && grantedClients().length">
         <table class="table table-sm align-middle mb-0">
           <thead>
             <tr>
+              <th style="width: 1%">
+                <input
+                  class="form-check-input mt-0"
+                  type="checkbox"
+                  data-testid="granted-select-all"
+                  [attr.aria-label]="'::GeoForge:Integration:SelectAll' | abpLocalization"
+                  [checked]="allGrantedSelected()"
+                  (change)="toggleSelectAllGranted()"
+                />
+              </th>
               <th>{{ '::GeoForge:Common:Client' | abpLocalization }}</th>
               <th>{{ '::GeoForge:Common:Status' | abpLocalization }}</th>
               <th>{{ '::GeoForge:Common:Quota' | abpLocalization }}</th>
@@ -316,7 +429,15 @@
             </tr>
           </thead>
           <tbody>
-            <tr *ngFor="let c of grantedClients()">
+            <tr *ngFor="let c of grantedClients()" [class.table-active]="isGrantedSelected(c.id)">
+              <td>
+                <input
+                  class="form-check-input mt-0"
+                  type="checkbox"
+                  [checked]="isGrantedSelected(c.id)"
+                  (change)="toggleGranted(c.id)"
+                />
+              </td>
               <td>
                 <div class="fw-semibold">{{ c.name }}</div>
                 <code class="small">{{ c.clientId }}</code>

@@ -7,6 +7,8 @@ import {
   ApiClientLayer,
   ApiClientSecret,
   AvailableClient,
+  BulkLayerAccessResult,
+  BulkLayerClients,
   ClientAuditLog,
   CreateApiClient,
   CreateRemoteDataSource,
@@ -313,9 +315,14 @@ export class GeoForgeService {
     return this.http.get<LayerClient[]>(`${this.base}/layers/${layerId}/clients`);
   }
 
-  /** Grants one layer to several clients at once. Returns how many were newly granted. */
-  bulkGrantClientsToLayer(layerId: string, apiClientIds: string[]): Observable<number> {
-    return this.http.post<number>(`${this.base}/layers/${layerId}/clients`, { apiClientIds });
+  /** Grants one layer to several clients at once, reporting added / already-had / failed. */
+  bulkGrantClientsToLayer(layerId: string, body: BulkLayerClients): Observable<BulkLayerAccessResult> {
+    return this.http.post<BulkLayerAccessResult>(`${this.base}/layers/${layerId}/grant-bulk`, body);
+  }
+
+  /** Removes one layer from several clients at once. The body carries the client ids + email switch. */
+  bulkRemoveClientsFromLayer(layerId: string, body: BulkLayerClients): Observable<BulkLayerAccessResult> {
+    return this.http.delete<BulkLayerAccessResult>(`${this.base}/layers/${layerId}/remove-bulk`, { body });
   }
 
   getClientLayers(id: string): Observable<ApiClientLayer[]> {

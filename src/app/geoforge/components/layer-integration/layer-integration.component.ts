@@ -8,13 +8,14 @@ import {
   signal,
 } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
-import { debounceTime, distinctUntilChanged, Subject, switchMap } from 'rxjs';
+import { debounceTime, Subject } from 'rxjs';
 import { Confirmation, ConfirmationService, ToasterService } from '@abp/ng.theme.shared';
 import { LocalizationService } from '@abp/ng.core';
 import { GeoForgeService } from '../../services/geoforge.service';
 import { EmailTemplateStateService } from '../../services/email-template-state.service';
 import {
   AvailableClient,
+  BulkLayerAccessResult,
   CLIENT_ID_CREATED_TEMPLATE_KEY,
   ClientEnvironment,
   ClientQuotaType,
@@ -53,11 +54,14 @@ interface NewClientForm {
 /**
  * "Integration Helper": everything an external system needs to consume this layer, on one page.
  *
- * <p>The access-credentials card offers two ways to give a client access to the layer — grant an
- * existing client, or create a new one — as a segmented control. "Choose existing" is a searchable
- * list that marks already-granted and suspended clients as unselectable rather than hiding them,
- * so the operator learns why the client they were looking for cannot be picked. Duplicate grants
- * are refused by the server (HTTP 409) and surfaced as a clear message, never as a second row.</p>
+ * <p>The access-credentials card offers two ways to give clients access to the layer — assign
+ * existing clients, or create a new one — as a segmented control. "Choose existing" is a bulk,
+ * multi-select surface: a virtual-scrolled, server-searched, paged list of the clients that do NOT
+ * yet read the layer, with checkboxes, selected chips and a running count. Granting moves the chosen
+ * clients into the "Clients with access" table below — and removing (per row, or in bulk from that
+ * table) moves them back — both applied locally so the two lists stay mutually exclusive without a
+ * reload. Each bulk call reports how many were added, already had access, and failed; an opt-in
+ * "send email" switch notifies the affected clients (still gated per client).</p>
  *
  * <p>The snippets are generated from the layer's own endpoint URLs and from a real client id, so
  * an operator copies a command that works rather than a template they must fill in.</p>
@@ -94,13 +98,49 @@ export class LayerIntegrationComponent implements OnInit {
 
   readonly tokenUrl = this.service.tokenUrl;
 
-  // ---- Choose-existing state ----
+  // ---- Choose-existing (bulk multi-select) state ----
   readonly search = signal('');
   readonly showSuspended = signal(false);
+
+  /** The available-clients list, accumulated page by page as the virtual list is scrolled. */
   readonly availableClients = signal<AvailableClient[]>([]);
+  readonly totalCount = signal(0);
   readonly loadingAvailable = signal(false);
-  readonly selectedClientId = signal<string | null>(null);
-  private readonly searchTrigger = new Subject<void>();
+  readonly hasMore = computed(() => this.availableClients().length < this.totalCount());
+
+  private readonly pageSize = 50;
+  private skip = 0;
+  /** Bumped on every fresh search so a stale in-flight page never appends to the new results. */
+  private loadToken = 0;
+  private readonly searchInput = new Subject<void>();
+
+  /** Every available client we have loaded, by id — lets a removed client be restored to the top list
+   * with its original layer count when it is moved back out of the granted table. */
+  private readonly clientCache = new Map<string, AvailableClient>();
+
+  /** The selected available clients (top list), by id, so chips render name + id even after paging. */
+  readonly selected = signal<Map<string, AvailableClient>>(new Map());
+  readonly selectedCount = computed(() => this.selected().size);
+  readonly selectedList = computed(() => Array.from(this.selected().values()));
+  readonly allLoadedSelected = computed(() => {
+    const loaded = this.availableClients();
+    return loaded.length > 0 && loaded.every(c => this.selected().has(c.id));
+  });
+
+  /** The selected granted clients (bottom table), by id — drives the bulk remove. */
+  readonly grantedSelected = signal<Set<string>>(new Set());
+  readonly grantedSelectedCount = computed(() => this.grantedSelected().size);
+  readonly allGrantedSelected = computed(() => {
+    const rows = this.grantedClients();
+    return rows.length > 0 && rows.every(c => this.grantedSelected().has(c.id));
+  });
+
+  /** Operation-level "email the affected clients" switch (still gated per-client on the server). */
+  readonly sendEmail = signal(true);
+  /** True while a bulk grant/remove request is in flight — drives the progress bar. */
+  readonly processing = signal(false);
+  /** The last bulk operation's counts, shown as a summary until the next action. */
+  readonly lastResult = signal<(BulkLayerAccessResult & { action: 'grant' | 'remove' }) | null>(null);
 
   // ---- Create-new state ----
   readonly form = signal<NewClientForm>(this.emptyForm());
@@ -130,30 +170,12 @@ export class LayerIntegrationComponent implements OnInit {
         ),
       );
 
-    // The picker query is debounced and switch-mapped, so a fast typist never races two searches
-    // and never sees the earlier one's results overwrite the later one's.
-    this.searchTrigger
-      .pipe(
-        debounceTime(250),
-        switchMap(() => {
-          this.loadingAvailable.set(true);
-          return this.service.getAvailableClientsForLayer(this.layer.id, {
-            filter: this.search().trim() || undefined,
-            includeInactive: this.showSuspended(),
-            maxResultCount: 25,
-          });
-        }),
-        takeUntilDestroyed(this.destroyRef),
-      )
-      .subscribe({
-        next: result => {
-          this.availableClients.set(result.items);
-          this.loadingAvailable.set(false);
-        },
-        error: () => this.loadingAvailable.set(false),
-      });
+    // The search box is debounced, so a fast typist triggers one reload, not one per keystroke.
+    this.searchInput
+      .pipe(debounceTime(250), takeUntilDestroyed(this.destroyRef))
+      .subscribe(() => this.reloadSearch());
 
-    this.searchTrigger.next();
+    this.reloadSearch();
   }
 
   // ---- Mode + granted list -------------------------------------------------
@@ -161,7 +183,7 @@ export class LayerIntegrationComponent implements OnInit {
   setMode(mode: 'existing' | 'new'): void {
     this.mode.set(mode);
     if (mode === 'existing') {
-      this.searchTrigger.next();
+      this.reloadSearch();
     }
   }
 
@@ -173,59 +195,271 @@ export class LayerIntegrationComponent implements OnInit {
       .subscribe({
         next: clients => {
           this.grantedClients.set(clients);
+          this.grantedSelected.set(new Set());
           this.loadingGranted.set(false);
         },
         error: () => this.loadingGranted.set(false),
       });
   }
 
-  // ---- Choose existing -----------------------------------------------------
+  // ---- Choose existing: search + paging ------------------------------------
 
   onSearchInput(value: string): void {
     this.search.set(value);
-    this.searchTrigger.next();
+    this.searchInput.next();
   }
 
   toggleShowSuspended(): void {
     this.showSuspended.update(v => !v);
-    this.searchTrigger.next();
+    this.reloadSearch();
   }
 
-  select(client: AvailableClient): void {
-    if (!client.isSelectable) {
+  /** Restarts the list from the first page (new filter, or after a bulk change). */
+  private reloadSearch(): void {
+    this.loadToken++;
+    this.skip = 0;
+    this.availableClients.set([]);
+    this.totalCount.set(0);
+    this.loadPage();
+  }
+
+  /** Fetches the next page and appends it. A `loadToken` guard drops responses from a superseded search. */
+  private loadPage(): void {
+    if (this.loadingAvailable()) {
       return;
     }
-    this.selectedClientId.set(client.id === this.selectedClientId() ? null : client.id);
+    const token = this.loadToken;
+    this.loadingAvailable.set(true);
+
+    this.service
+      .getAvailableClientsForLayer(this.layer.id, {
+        // Only clients that do NOT already read this layer — the granted ones live in the table below.
+        // A granted client never appears in both lists at once.
+        filter: this.search().trim() || undefined,
+        includeInactive: this.showSuspended(),
+        skipCount: this.skip,
+        maxResultCount: this.pageSize,
+      })
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: result => {
+          if (token !== this.loadToken) {
+            return; // a newer search superseded this response
+          }
+          result.items.forEach(c => this.clientCache.set(c.id, c));
+          this.availableClients.update(list =>
+            this.skip === 0 ? result.items : [...list, ...result.items],
+          );
+          this.totalCount.set(result.totalCount);
+          this.skip += result.items.length;
+          this.loadingAvailable.set(false);
+        },
+        error: () => this.loadingAvailable.set(false),
+      });
   }
 
-  grantSelected(): void {
-    const clientId = this.selectedClientId();
-    if (!clientId) {
+  /** The virtual scroll viewport is nearing its end — pull the next page. */
+  onScrolledIndexChange(index: number): void {
+    const buffer = 10;
+    if (!this.loadingAvailable() && this.hasMore() && index + buffer >= this.availableClients().length) {
+      this.loadPage();
+    }
+  }
+
+  // ---- Choose existing: selection ------------------------------------------
+
+  isSelected(id: string): boolean {
+    return this.selected().has(id);
+  }
+
+  toggleSelect(client: AvailableClient): void {
+    // Every listed client is a valid target: ungranted ones can be granted, granted ones removed.
+    this.selected.update(m => {
+      const next = new Map(m);
+      if (next.has(client.id)) {
+        next.delete(client.id);
+      } else {
+        next.set(client.id, client);
+      }
+      return next;
+    });
+  }
+
+  removeSelected(id: string): void {
+    this.selected.update(m => {
+      const next = new Map(m);
+      next.delete(id);
+      return next;
+    });
+  }
+
+  /** Selects every selectable client currently loaded; toggles back to empty when all are selected. */
+  toggleSelectAll(): void {
+    if (this.allLoadedSelected()) {
+      this.clearSelection();
+      return;
+    }
+    this.selected.update(m => {
+      const next = new Map(m);
+      for (const c of this.availableClients()) {
+        next.set(c.id, c);
+      }
+      return next;
+    });
+  }
+
+  clearSelection(): void {
+    this.selected.set(new Map());
+  }
+
+  // ---- Granted table: selection --------------------------------------------
+
+  isGrantedSelected(id: string): boolean {
+    return this.grantedSelected().has(id);
+  }
+
+  toggleGranted(id: string): void {
+    this.grantedSelected.update(s => {
+      const next = new Set(s);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  }
+
+  toggleSelectAllGranted(): void {
+    if (this.allGrantedSelected()) {
+      this.grantedSelected.set(new Set());
+      return;
+    }
+    this.grantedSelected.set(new Set(this.grantedClients().map(c => c.id)));
+  }
+
+  // ---- Grant (top → bottom) / Remove (bottom → top): optimistic ------------
+
+  /**
+   * Grants the layer to the selected available clients, then moves them from the top list into the
+   * granted table locally — no reload. The server call confirms and emails; the two lists stay
+   * mutually exclusive because a granted client is only ever in one collection.
+   */
+  grant(): void {
+    const clients = this.selectedList();
+    if (clients.length === 0) {
       this.toaster.warn(this.t('::GeoForge:Integration:SelectClientFirst'));
       return;
     }
+    const ids = clients.map(c => c.id);
 
-    this.busy.set(true);
+    this.processing.set(true);
+    this.lastResult.set(null);
     this.service
-      .grantLayerAccess(clientId, { layerId: this.layer.id })
+      .bulkGrantClientsToLayer(this.layer.id, { clientIds: ids, sendEmail: this.sendEmail() })
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
-        next: () => {
-          this.busy.set(false);
-          this.selectedClientId.set(null);
-          this.toaster.success(this.t('::GeoForge:Integration:GrantedToast'));
-          this.loadGranted();
-          this.searchTrigger.next();
+        next: result => {
+          this.processing.set(false);
+          this.lastResult.set({ ...result, action: 'grant' });
+          this.toaster.success(this.t('::GeoForge:Integration:BulkGrantedToast'));
+          this.moveToGranted(clients);
+          this.clearSelection();
         },
-        error: err => {
-          this.busy.set(false);
-          // The server refuses a duplicate with 409; show the plain message rather than a raw error.
-          if (err?.status === 409) {
-            this.toaster.warn(this.t('::GeoForge:Integration:DuplicateToast'));
-            this.searchTrigger.next();
-          }
-        },
+        error: () => this.processing.set(false),
       });
+  }
+
+  /** Bulk-removes the selected granted clients, moving them back to the available list locally. */
+  removeSelectedGranted(): void {
+    const ids = Array.from(this.grantedSelected());
+    if (ids.length === 0) {
+      this.toaster.warn(this.t('::GeoForge:Integration:SelectClientFirst'));
+      return;
+    }
+    this.confirmRemove(ids.length, () => {
+      this.processing.set(true);
+      this.lastResult.set(null);
+      this.service
+        .bulkRemoveClientsFromLayer(this.layer.id, { clientIds: ids, sendEmail: this.sendEmail() })
+        .pipe(takeUntilDestroyed(this.destroyRef))
+        .subscribe({
+          next: result => {
+            this.processing.set(false);
+            this.lastResult.set({ ...result, action: 'remove' });
+            this.toaster.success(this.t('::GeoForge:Integration:BulkRemovedToast'));
+            const removed = this.grantedClients().filter(c => ids.includes(c.id));
+            this.moveToAvailable(removed);
+            this.grantedSelected.set(new Set());
+          },
+          error: () => this.processing.set(false),
+        });
+    });
+  }
+
+  private confirmRemove(count: number, onConfirm: () => void): void {
+    this.confirmation
+      .warn(
+        this.t('::GeoForge:Integration:BulkRemoveConfirm', count + ''),
+        this.t('::GeoForge:Integration:BulkRemoveTitle'),
+      )
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe(status => {
+        if (status === Confirmation.Status.confirm) {
+          onConfirm();
+        }
+      });
+  }
+
+  /** Removes the given clients from the top list and prepends them to the granted table. */
+  private moveToGranted(clients: AvailableClient[]): void {
+    const moved = new Set(clients.map(c => c.id));
+    this.availableClients.update(list => list.filter(c => !moved.has(c.id)));
+    this.totalCount.update(t => Math.max(0, t - moved.size));
+    this.grantedClients.update(rows => [...clients.map(c => this.toGrantedRow(c)), ...rows]);
+  }
+
+  /** Removes the given clients from the granted table and prepends them to the top list. */
+  private moveToAvailable(rows: LayerClient[]): void {
+    const moved = new Set(rows.map(c => c.id));
+    this.grantedClients.update(list => list.filter(c => !moved.has(c.id)));
+    this.availableClients.update(list => [...rows.map(c => this.toAvailableRow(c)), ...list]);
+    this.totalCount.update(t => t + rows.length);
+  }
+
+  private toGrantedRow(c: AvailableClient): LayerClient {
+    return {
+      id: c.id,
+      name: c.name,
+      clientId: c.clientId,
+      effectiveStatus: c.effectiveStatus,
+      quotaType: c.quotaType,
+      quotaLimit: c.quotaLimit,
+      usedRequests: c.usedRequests,
+      remainingRequests: c.remainingRequests,
+      isAccessEnabled: true,
+      requestsToThisLayer: 0,
+      grantedAt: new Date().toISOString(),
+    };
+  }
+
+  private toAvailableRow(c: LayerClient): AvailableClient {
+    // Restore the original layer count when we have it cached (it was captured before this layer was
+    // granted, which is exactly the count after removing it again); otherwise fall back to zero.
+    const cached = this.clientCache.get(c.id);
+    return {
+      id: c.id,
+      name: c.name,
+      clientId: c.clientId,
+      effectiveStatus: c.effectiveStatus,
+      quotaType: c.quotaType,
+      quotaLimit: c.quotaLimit,
+      usedRequests: c.usedRequests,
+      remainingRequests: c.remainingRequests,
+      grantedLayerCount: cached?.grantedLayerCount ?? 0,
+      isAlreadyGranted: false,
+      isSelectable: true,
+    };
   }
 
   // ---- Create new ----------------------------------------------------------
@@ -319,7 +553,7 @@ export class LayerIntegrationComponent implements OnInit {
           }
           this.mode.set('existing');
           this.loadGranted();
-          this.searchTrigger.next();
+          this.reloadSearch();
         },
         error: () => this.busy.set(false),
       });
@@ -340,12 +574,12 @@ export class LayerIntegrationComponent implements OnInit {
         }
 
         this.service
-          .revokeLayerAccess(client.id, this.layer.id)
+          .revokeLayerAccess(client.id, this.layer.id, this.sendEmail())
           .pipe(takeUntilDestroyed(this.destroyRef))
           .subscribe(() => {
             this.toaster.success(this.t('::GeoForge:Layer:AccessRemovedToast'));
-            this.loadGranted();
-            this.searchTrigger.next();
+            // Move it straight back to the available list — no reload, never in both.
+            this.moveToAvailable([client]);
           });
       });
   }

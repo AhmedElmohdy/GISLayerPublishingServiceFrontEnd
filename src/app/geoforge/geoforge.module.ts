@@ -1,4 +1,5 @@
 import { NgModule } from '@angular/core';
+import { ScrollingModule } from '@angular/cdk/scrolling';
 import { SharedModule } from '../shared/shared.module';
 import { GeoForgeRoutingModule } from './geoforge-routing.module';
 import { ClientDetailComponent } from './components/clients/client-detail/client-detail.component';
@@ -70,6 +71,6 @@ import { StatusBadgeComponent } from './components/monitoring/status-badge.compo
     IncidentListComponent,
     LayerHealthComponent,
   ],
-  imports: [SharedModule, GeoForgeRoutingModule],
+  imports: [SharedModule, GeoForgeRoutingModule, ScrollingModule],
 })
 export class GeoForgeModule {}

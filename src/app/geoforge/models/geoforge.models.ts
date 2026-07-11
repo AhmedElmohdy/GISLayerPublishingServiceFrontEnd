@@ -611,6 +611,23 @@ export interface GrantLayerAccess {
   sendEmailNotification?: boolean;
 }
 
+/** Body for the layer page's bulk grant/remove of many clients. */
+export interface BulkLayerClients {
+  clientIds: string[];
+  /** Email each affected client — still gated by the client's own layer-access preference. */
+  sendEmail: boolean;
+}
+
+/**
+ * Outcome of a bulk grant/remove. For a grant: newly granted, already had access, not found.
+ * For a remove: `added` = number removed, `alreadyExists` = had nothing to remove, `failed` = not found.
+ */
+export interface BulkLayerAccessResult {
+  added: number;
+  alreadyExists: number;
+  failed: number;
+}
+
 // ---- Email notifications ----------------------------------------------------
 
 /** The outgoing-email account as the settings screen reads it. Never carries the password. */

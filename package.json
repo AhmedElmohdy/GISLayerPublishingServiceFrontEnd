@@ -19,6 +19,7 @@
     "@abp/ng.setting-management": "~9.2.0",
     "@abp/ng.theme.shared": "~9.2.0",
     "@angular/animations": "~19.1.0",
+    "@angular/cdk": "^19.2.0",
     "@angular/common": "~19.1.0",
     "@angular/compiler": "~19.1.0",
     "@angular/core": "~19.1.0",
